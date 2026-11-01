@@ -13,23 +13,32 @@ object GameHtmlProvider {
             color: #E2E8F0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow: hidden;
-            touch-action: manipulation;
+            touch-action: none;
         }
         .btn {
             background: #1E293B;
             color: #38BDF8;
             border: 1px solid #334155;
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.15s ease;
+            min-height: 48px;
+            min-width: 48px;
+            touch-action: manipulation;
+            transition: transform 0.08s ease, background 0.08s ease, box-shadow 0.08s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
-        .btn:active { background: #38BDF8; color: #090D16; transform: scale(0.96); }
+        .btn:active, .btn.touch-active {
+            background: #38BDF8 !important;
+            color: #090D16 !important;
+            transform: scale(0.92);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
+        }
         .hud {
             display: flex;
             align-items: center;
@@ -39,6 +48,12 @@ object GameHtmlProvider {
             border-bottom: 1px solid #1E293B;
             width: 100%;
             z-index: 10;
+            touch-action: manipulation;
+        }
+        .hud .btn {
+            min-height: 38px;
+            padding: 6px 14px;
+            font-size: 13px;
         }
         .badge {
             background: #1E293B;
@@ -55,6 +70,11 @@ object GameHtmlProvider {
         const AudioFX = {
             ctx: null,
             muted: false,
+            vibrate(ms = 12) {
+                if (navigator.vibrate) {
+                    try { navigator.vibrate(ms); } catch (e) {}
+                }
+            },
             init() {
                 if (!this.ctx) {
                     const AC = window.AudioContext || window.webkitAudioContext;
@@ -65,6 +85,7 @@ object GameHtmlProvider {
                 }
             },
             play(type) {
+                this.vibrate(type === 'win' || type === 'over' ? 35 : 12);
                 if (this.muted) return;
                 try {
                     this.init();
@@ -121,6 +142,42 @@ object GameHtmlProvider {
                 try { if (window.localStorage) window.localStorage.setItem(k, v); } catch(e) {}
             }
         };
+
+        // Universal Mobile Touch-Repeat & Zero-Latency Action Helper
+        function bindTouchRepeat(el, callback, repeatMs = 120, delayMs = 240) {
+            if (!el) return;
+            let timer = null;
+            let interval = null;
+            const start = (e) => {
+                if (e) e.preventDefault();
+                AudioFX.init();
+                AudioFX.vibrate(10);
+                el.classList.add('touch-active');
+                callback();
+                timer = setTimeout(() => {
+                    interval = setInterval(() => {
+                        AudioFX.vibrate(8);
+                        callback();
+                    }, repeatMs);
+                }, delayMs);
+            };
+            const stop = () => {
+                el.classList.remove('touch-active');
+                if (timer) clearTimeout(timer);
+                if (interval) clearInterval(interval);
+                timer = null;
+                interval = null;
+            };
+            el.addEventListener('touchstart', start, { passive: false });
+            el.addEventListener('touchend', stop);
+            el.addEventListener('touchcancel', stop);
+            el.addEventListener('mousedown', (e) => {
+                if ('ontouchstart' in window) return;
+                start(e);
+            });
+            el.addEventListener('mouseup', stop);
+            el.addEventListener('mouseleave', stop);
+        }
 
         window.addEventListener('click', () => AudioFX.init(), { once: true });
         window.addEventListener('touchstart', () => AudioFX.init(), { once: true });
@@ -381,11 +438,11 @@ object GameHtmlProvider {
             }
             .dpad {
                 display: grid;
-                grid-template-columns: repeat(3, 56px);
-                gap: 8px;
-                margin-top: 10px;
+                grid-template-columns: repeat(3, 68px);
+                gap: 10px;
+                margin-top: 14px;
             }
-            .dbtn { height: 46px; font-size: 20px; border-radius: 8px; background: #1E293B; }
+            .dbtn { height: 56px; font-size: 24px; border-radius: 14px; background: #1E293B; }
         </style>
     </head>
     <body>
@@ -398,11 +455,11 @@ object GameHtmlProvider {
             <canvas id="canvas" width="400" height="400"></canvas>
             <div class="dpad">
                 <div></div>
-                <button class="btn dbtn" onclick="setDir(0, -1)">▲</button>
+                <button class="btn dbtn" ontouchstart="setDir(0, -1); event.preventDefault();" onclick="setDir(0, -1)">▲</button>
                 <div></div>
-                <button class="btn dbtn" onclick="setDir(-1, 0)">◀</button>
-                <button class="btn dbtn" onclick="setDir(0, 1)">▼</button>
-                <button class="btn dbtn" onclick="setDir(1, 0)">▶</button>
+                <button class="btn dbtn" ontouchstart="setDir(-1, 0); event.preventDefault();" onclick="setDir(-1, 0)">◀</button>
+                <button class="btn dbtn" ontouchstart="setDir(0, 1); event.preventDefault();" onclick="setDir(0, 1)">▼</button>
+                <button class="btn dbtn" ontouchstart="setDir(1, 0); event.preventDefault();" onclick="setDir(1, 0)">▶</button>
             </div>
         </div>
 
@@ -532,16 +589,18 @@ object GameHtmlProvider {
                 draw();
             }
 
-            // Swipe on canvas
+            // Swipe anywhere on screen or canvas
             let tsX = 0, tsY = 0;
-            canvas.addEventListener('touchstart', e => {
+            document.body.addEventListener('touchstart', e => {
+                if (e.target.closest('.dpad') || e.target.closest('.hud')) return;
                 tsX = e.touches[0].clientX;
                 tsY = e.touches[0].clientY;
             }, { passive: true });
-            canvas.addEventListener('touchend', e => {
+            document.body.addEventListener('touchend', e => {
+                if (e.target.closest('.dpad') || e.target.closest('.hud')) return;
                 const dx = e.changedTouches[0].clientX - tsX;
                 const dy = e.changedTouches[0].clientY - tsY;
-                if (Math.max(Math.abs(dx), Math.abs(dy)) > 20) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) > 15) {
                     if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
                     else setDir(0, dy > 0 ? 1 : -1);
                 }
@@ -614,13 +673,13 @@ object GameHtmlProvider {
                 </div>
             </div>
             <div class="controls-grid">
-                <button class="btn cbtn" onclick="holdPiece()">📥</button>
-                <button class="btn cbtn" onclick="moveLeft()">◀</button>
-                <button class="btn cbtn" onclick="rotatePiece()">↻</button>
-                <button class="btn cbtn" onclick="moveRight()">▶</button>
-                <button class="btn cbtn" onclick="hardDrop()" style="color:#F43F5E;">⚡</button>
+                <button id="btn-hold" class="btn cbtn" onclick="holdPiece()">📥</button>
+                <button id="btn-left" class="btn cbtn">◀</button>
+                <button id="btn-rot" class="btn cbtn" onclick="rotatePiece()">↻</button>
+                <button id="btn-right" class="btn cbtn">▶</button>
+                <button id="btn-hard" class="btn cbtn" onclick="hardDrop()" style="color:#F43F5E;">⚡</button>
             </div>
-            <button class="btn" onclick="softDrop()" style="width:100%; max-width:380px; margin-top:6px; height:38px;">▼ SOFT DROP</button>
+            <button id="btn-drop" class="btn" style="width:100%; max-width:380px; margin-top:8px; height:48px; font-weight:bold;">▼ SOFT DROP</button>
         </div>
 
         <script>
@@ -859,6 +918,34 @@ object GameHtmlProvider {
                 drawHold();
                 draw();
             }
+
+            // Mobile Touch Repeat Controls
+            bindTouchRepeat(document.getElementById('btn-left'), () => moveLeft(), 90, 220);
+            bindTouchRepeat(document.getElementById('btn-right'), () => moveRight(), 90, 220);
+            bindTouchRepeat(document.getElementById('btn-drop'), () => softDrop(), 70, 180);
+
+            // Direct Touch Gestures on Tetris Canvas
+            let tStartX = 0, tStartY = 0, tStartTime = 0;
+            canvas.addEventListener('touchstart', e => {
+                tStartX = e.touches[0].clientX;
+                tStartY = e.touches[0].clientY;
+                tStartTime = Date.now();
+            }, { passive: true });
+            canvas.addEventListener('touchend', e => {
+                const dx = e.changedTouches[0].clientX - tStartX;
+                const dy = e.changedTouches[0].clientY - tStartY;
+                const elapsed = Date.now() - tStartTime;
+                const absDx = Math.abs(dx);
+                const absDy = Math.abs(dy);
+
+                if (absDx < 18 && absDy < 18 && elapsed < 250) {
+                    rotatePiece();
+                } else if (absDx > absDy && absDx > 25) {
+                    if (dx > 0) moveRight(); else moveLeft();
+                } else if (absDy > absDx && absDy > 30) {
+                    if (dy > 80) hardDrop(); else softDrop();
+                }
+            }, { passive: true });
 
             resetGame();
             setInterval(() => { if (!gameOver) softDrop(); }, 750);
@@ -1395,8 +1482,16 @@ object GameHtmlProvider {
                 requestAnimationFrame(loop);
             }
 
-            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); flap(); });
-            canvas.addEventListener('mousedown', () => flap());
+            document.body.addEventListener('touchstart', (e) => {
+                if (e.target.closest('.hud')) return;
+                e.preventDefault();
+                AudioFX.vibrate(14);
+                flap();
+            }, { passive: false });
+            document.body.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.hud')) return;
+                flap();
+            });
             loop();
         </script>
     </body>
@@ -1847,8 +1942,8 @@ object GameHtmlProvider {
                 height: 60vh;
                 touch-action: none;
             }
-            .dpad { display: flex; gap: 16px; margin-top: 10px; width: 100%; max-width: 360px; justify-content: center; }
-            .pbtn { width: 45%; height: 44px; font-size: 20px; border-radius: 8px; }
+            .dpad { display: flex; gap: 14px; margin-top: 12px; width: 100%; max-width: 360px; justify-content: center; }
+            .pbtn { width: 48%; height: 52px; font-size: 18px; border-radius: 12px; }
         </style>
     </head>
     <body>
@@ -1860,8 +1955,8 @@ object GameHtmlProvider {
         <div class="container">
             <canvas id="breakout-canvas" width="360" height="480"></canvas>
             <div class="dpad">
-                <button class="btn pbtn" onmousedown="paddleLeft()" ontouchstart="paddleLeft()">◀ Left</button>
-                <button class="btn pbtn" onmousedown="paddleRight()" ontouchstart="paddleRight()">Right ▶</button>
+                <button id="p-left" class="btn pbtn">◀ Left</button>
+                <button id="p-right" class="btn pbtn">Right ▶</button>
             </div>
         </div>
 
@@ -1903,12 +1998,21 @@ object GameHtmlProvider {
             function paddleLeft() { paddleX = Math.max(0, paddleX - 25); }
             function paddleRight() { paddleX = Math.min(canvas.width - paddleW, paddleX + 25); }
 
-            // Drag paddle on touch
-            canvas.addEventListener('touchmove', e => {
+            // Drag paddle on touch (both touchstart and touchmove)
+            function setPaddleFromTouch(clientX) {
                 const rect = canvas.getBoundingClientRect();
-                const touchX = e.touches[0].clientX - rect.left;
+                const touchX = clientX - rect.left;
                 paddleX = Math.max(0, Math.min(canvas.width - paddleW, (touchX / rect.width) * canvas.width - paddleW / 2));
+            }
+            canvas.addEventListener('touchstart', e => {
+                setPaddleFromTouch(e.touches[0].clientX);
             }, { passive: true });
+            canvas.addEventListener('touchmove', e => {
+                setPaddleFromTouch(e.touches[0].clientX);
+            }, { passive: true });
+
+            bindTouchRepeat(document.getElementById('p-left'), () => paddleLeft(), 40, 160);
+            bindTouchRepeat(document.getElementById('p-right'), () => paddleRight(), 40, 160);
 
             function update() {
                 ballX += dx;
