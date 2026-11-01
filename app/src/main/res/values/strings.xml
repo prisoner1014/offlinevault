@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Offline Vault</string>
+    <string name="nav_vault">Vault</string>
+    <string name="nav_downloader">Downloader</string>
+    <string name="nav_podcasts">Podcasts &amp; RSS</string>
+    <string name="nav_browser">Browser</string>
+    <string name="nav_settings">Settings</string>
+</resources>
