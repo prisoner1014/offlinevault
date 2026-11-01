@@ -1,6 +1,8 @@
 package com.offlinevault.app.ui.screens.games
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.ViewQuilt
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -52,7 +54,7 @@ object OfflineGameCatalog {
             title = "Block Drop",
             subtitle = "Falling tetromino puzzle",
             category = GameCategory.ARCADE,
-            icon = Icons.Default.ViewQuilt,
+            icon = Icons.AutoMirrored.Filled.ViewQuilt,
             description = "Classic falling block arcade puzzle. Rotate, drop, clear lines, and beat high score records.",
             badge = "Arcade Favorite",
             instructions = "Use on-screen controls: Rotate (↻), Move Left/Right, Soft Drop, Hard Drop (⚡), and Hold (📥). Clear horizontal lines to score points and level up."
@@ -126,6 +128,36 @@ object OfflineGameCatalog {
             description = "Smash neon bricks with your paddle and bouncing ball. Collect power-ups across 5 challenging levels.",
             badge = "Retro Action",
             instructions = "Drag the paddle or use on-screen buttons to bounce the ball into bricks. Catch falling power-up capsules (Wide Paddle, Multi-Ball, Lasers, Slow Ball) to maximize your score."
+        ),
+        GameDefinition(
+            id = "slicer",
+            title = "Cyber Blade Slicer",
+            subtitle = "Fruit Ninja style swipe & slash",
+            category = GameCategory.ARCADE,
+            icon = Icons.Default.ContentCut,
+            description = "Slice flying cyber-orbs and power gems with glowing neon blade trails. Avoid ticking bombs and score massive multi-combos.",
+            badge = "Top Hit",
+            instructions = "Swipe your finger across the screen to slice through flying targets. Never slice a red skull bomb! Slice 3 or more targets in a single stroke for bonus combo points."
+        ),
+        GameDefinition(
+            id = "crossing",
+            title = "Pixel Crossing",
+            subtitle = "Crossy Road style highway runner",
+            category = GameCategory.ARCADE,
+            icon = Icons.AutoMirrored.Filled.DirectionsRun,
+            description = "Hop across bustling neon highways, rivers with floating rafts, and high-speed train tracks in an infinite retro cyber world.",
+            badge = "Endless Classic",
+            instructions = "Tap anywhere to hop forward. Swipe Left, Right, or Down to dodge speeding traffic and floating logs. Don't linger too long or the recovery drone will catch you!"
+        ),
+        GameDefinition(
+            id = "jetpack",
+            title = "Jetpack Rush",
+            subtitle = "Jetpack Joyride style thruster dash",
+            category = GameCategory.ARCADE,
+            icon = Icons.Default.RocketLaunch,
+            description = "Thrust through a high-tech obstacle laboratory. Dodge electric zappers, laser grids, and homing missiles while collecting energy credits.",
+            badge = "Reflex Hit",
+            instructions = "Touch and hold anywhere to fire bullet thrusters and lift off. Release to drop with gravity. Dodge electric zapper fields and collect floating energy credits."
         )
     )
 

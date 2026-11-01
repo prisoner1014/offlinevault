@@ -6,8 +6,8 @@ import org.junit.Test
 class OfflineGamesTest {
 
     @Test
-    fun testCatalogHasExactlyTenGames() {
-        assertEquals("There should be exactly 10 offline games", 10, OfflineGameCatalog.games.size)
+    fun testCatalogHasAtLeastTenGames() {
+        assertEquals("There should be exactly 13 offline games", 13, OfflineGameCatalog.games.size)
     }
 
     @Test
@@ -30,9 +30,9 @@ class OfflineGamesTest {
             assertNotNull("HTML for '${game.id}' must not be null", html)
             assertTrue("HTML for '${game.id}' must not be blank", html.isNotBlank())
             assertTrue("HTML for '${game.id}' must contain <!DOCTYPE html>", html.contains("<!DOCTYPE html>"))
-            assertTrue("HTML for '${game.id}' must contain viewport meta tag", html.contains("viewport"))
+            assertTrue("HTML for '${game.id}' must contain viewport meta tag>", html.contains("viewport"))
             assertTrue("HTML for '${game.id}' must contain AudioFX synthesizer", html.contains("AudioFX"))
-            assertTrue("HTML for '${game.id}' must contain background styling", html.contains("#090D16") || html.contains("#0D131F"))
+            assertTrue("HTML for '${game.id}' must contain background styling", html.contains("#090D16") || html.contains("#0D131F") || html.contains("#070A12") || html.contains("#0B0F19"))
         }
     }
 
@@ -45,6 +45,18 @@ class OfflineGamesTest {
         val snake = OfflineGameCatalog.getGameById("snake")
         assertNotNull(snake)
         assertEquals("Retro Snake", snake?.title)
+
+        val slicer = OfflineGameCatalog.getGameById("slicer")
+        assertNotNull(slicer)
+        assertEquals("Cyber Blade Slicer", slicer?.title)
+
+        val crossing = OfflineGameCatalog.getGameById("crossing")
+        assertNotNull(crossing)
+        assertEquals("Pixel Crossing", crossing?.title)
+
+        val jetpack = OfflineGameCatalog.getGameById("jetpack")
+        assertNotNull(jetpack)
+        assertEquals("Jetpack Rush", jetpack?.title)
 
         val tetris = OfflineGameCatalog.getGameById("tetris")
         assertNotNull(tetris)

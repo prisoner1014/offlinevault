@@ -196,6 +196,9 @@ object GameHtmlProvider {
             "connect4" -> getConnect4Html()
             "memory" -> getMemoryHtml()
             "breakout" -> getBreakoutHtml()
+            "slicer" -> getSlicerHtml()
+            "crossing" -> getCrossingHtml()
+            "jetpack" -> getJetpackHtml()
             else -> get2048Html()
         }
     }
@@ -2097,4 +2100,902 @@ object GameHtmlProvider {
     </body>
     </html>
     """.trimIndent()
+
+    // 11. GAME: CYBER BLADE SLICER (Fruit Ninja Style)
+    private fun getSlicerHtml(): String = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Cyber Blade Slicer</title>
+        $COMMON_HEAD
+        <style>
+            .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100% - 50px); padding: 4px; }
+            #slicer-canvas {
+                background: #070A12;
+                border: 2px solid #1E293B;
+                border-radius: 12px;
+                box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+                max-width: 96vw;
+                height: 82vh;
+                touch-action: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="hud">
+            <div><span style="color:#94A3B8;">SCORE: </span><span id="score" class="badge">0</span></div>
+            <div><span style="color:#94A3B8;">BEST: </span><span id="best" class="badge">0</span></div>
+            <div><span id="lives" style="font-size:16px;">❤️❤️❤️</span></div>
+            <button class="btn" onclick="initGame()">Restart</button>
+        </div>
+        <div class="container">
+            <canvas id="slicer-canvas" width="380" height="580"></canvas>
+        </div>
+
+        <script>
+            const canvas = document.getElementById('slicer-canvas');
+            const ctx = canvas.getContext('2d');
+
+            let score = 0, lives = 3, gameOver = false;
+            let best = parseInt(SafeStorage.getItem('slicer_best') || '0', 10);
+            document.getElementById('best').innerText = best;
+
+            let targets = [];
+            let particles = [];
+            let floatingTexts = [];
+            let bladeTrail = [];
+            let sliceCountInStroke = 0;
+            let isSlicing = false;
+            let lastSpawnTime = 0;
+
+            const TYPES = {
+                MELON: { radius: 26, color: '#22C55E', points: 1, label: '🍈' },
+                BERRY: { radius: 20, color: '#EC4899', points: 2, label: '🍓' },
+                STAR: { radius: 18, color: '#FBBF24', points: 3, label: '⭐' },
+                BOMB: { radius: 24, color: '#EF4444', points: 0, label: '💣' }
+            };
+
+            function initGame() {
+                score = 0; lives = 3; gameOver = false;
+                targets = []; particles = []; floatingTexts = []; bladeTrail = [];
+                document.getElementById('score').innerText = 0;
+                document.getElementById('lives').innerText = '❤️❤️❤️';
+                AudioFX.play('tap');
+            }
+
+            function spawnWave() {
+                if (gameOver) return;
+                const count = Math.floor(Math.random() * 3) + 1;
+                for (let i = 0; i < count; i++) {
+                    const isBomb = Math.random() < 0.22;
+                    let typeKey = 'MELON';
+                    if (isBomb) typeKey = 'BOMB';
+                    else {
+                        const r = Math.random();
+                        typeKey = r < 0.5 ? 'MELON' : (r < 0.8 ? 'BERRY' : 'STAR');
+                    }
+                    const t = TYPES[typeKey];
+                    const x = 50 + Math.random() * (canvas.width - 100);
+                    const vx = (canvas.width / 2 - x) * 0.015 + (Math.random() - 0.5) * 3;
+                    const vy = -12 - Math.random() * 4;
+                    targets.push({
+                        type: typeKey,
+                        radius: t.radius,
+                        color: t.color,
+                        label: t.label,
+                        points: t.points,
+                        x, y: canvas.height + 20,
+                        vx, vy,
+                        rot: 0, vRot: (Math.random() - 0.5) * 0.15,
+                        sliced: false
+                    });
+                }
+            }
+
+            function addParticles(x, y, color) {
+                for (let i = 0; i < 14; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 5;
+                    particles.push({
+                        x, y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        radius: 2 + Math.random() * 3,
+                        color,
+                        alpha: 1.0,
+                        decay: 0.03 + Math.random() * 0.03
+                    });
+                }
+            }
+
+            function checkSlice(p1, p2) {
+                if (gameOver) return;
+                targets.forEach(t => {
+                    if (t.sliced) return;
+                    // Distance from target to line segment p1-p2
+                    const l2 = (p2.x - p1.x)**2 + (p2.y - p1.y)**2;
+                    let d = 0;
+                    if (l2 === 0) {
+                        d = Math.hypot(t.x - p1.x, t.y - p1.y);
+                    } else {
+                        let u = ((t.x - p1.x)*(p2.x - p1.x) + (t.y - p1.y)*(p2.y - p1.y)) / l2;
+                        u = Math.max(0, Math.min(1, u));
+                        const projX = p1.x + u * (p2.x - p1.x);
+                        const projY = p1.y + u * (p2.y - p1.y);
+                        d = Math.hypot(t.x - projX, t.y - projY);
+                    }
+
+                    if (d < t.radius + 10) {
+                        t.sliced = true;
+                        addParticles(t.x, t.y, t.color);
+                        if (t.type === 'BOMB') {
+                            AudioFX.play('over');
+                            AudioFX.vibrate(50);
+                            lives = 0;
+                            gameOver = true;
+                            document.getElementById('lives').innerText = '💥💥💥';
+                        } else {
+                            sliceCountInStroke++;
+                            score += t.points;
+                            AudioFX.play('merge');
+                            AudioFX.vibrate(15);
+                            if (score > best) {
+                                best = score;
+                                SafeStorage.setItem('slicer_best', best);
+                                document.getElementById('best').innerText = best;
+                            }
+                            document.getElementById('score').innerText = score;
+                            if (sliceCountInStroke >= 3) {
+                                const comboBonus = sliceCountInStroke * 5;
+                                score += comboBonus;
+                                floatingTexts.push({
+                                    text: sliceCountInStroke + 'x COMBO! +' + comboBonus,
+                                    x: t.x, y: t.y, alpha: 1.0, color: '#38BDF8'
+                                });
+                            }
+                        }
+                    }
+                });
+            }
+
+            function getTouchPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches ? e.touches[0] : e;
+                return {
+                    x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+                    y: (touch.clientY - rect.top) * (canvas.height / rect.height),
+                    time: Date.now()
+                };
+            }
+
+            canvas.addEventListener('touchstart', e => {
+                isSlicing = true;
+                sliceCountInStroke = 0;
+                bladeTrail = [getTouchPos(e)];
+            }, { passive: true });
+
+            canvas.addEventListener('touchmove', e => {
+                if (!isSlicing) return;
+                const pos = getTouchPos(e);
+                bladeTrail.push(pos);
+                if (bladeTrail.length > 1) {
+                    checkSlice(bladeTrail[bladeTrail.length - 2], pos);
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchend', () => {
+                isSlicing = false;
+                sliceCountInStroke = 0;
+            });
+
+            function update() {
+                const now = Date.now();
+                if (now - lastSpawnTime > 1800 && targets.length < 5) {
+                    spawnWave();
+                    lastSpawnTime = now;
+                }
+
+                // Update targets
+                targets.forEach(t => {
+                    t.x += t.vx;
+                    t.y += t.vy;
+                    t.vy += 0.32; // gravity
+                    t.rot += t.vRot;
+
+                    if (!t.sliced && t.y > canvas.height + 40 && t.vy > 0) {
+                        t.sliced = true; // escaped
+                        if (t.type !== 'BOMB' && !gameOver) {
+                            lives--;
+                            AudioFX.play('tap');
+                            AudioFX.vibrate(25);
+                            const hearts = ['','❤️','❤️❤️','❤️❤️❤️'];
+                            document.getElementById('lives').innerText = hearts[Math.max(0, lives)] || '💀';
+                            if (lives <= 0) {
+                                gameOver = true;
+                                AudioFX.play('over');
+                            }
+                        }
+                    }
+                });
+                targets = targets.filter(t => t.y < canvas.height + 60 && (!t.sliced || t.y < canvas.height));
+
+                // Particles
+                particles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy; p.vy += 0.15;
+                    p.alpha -= p.decay;
+                });
+                particles = particles.filter(p => p.alpha > 0);
+
+                // Blade trail decay
+                bladeTrail = bladeTrail.filter(pt => now - pt.time < 120);
+
+                // Floating texts
+                floatingTexts.forEach(ft => { ft.y -= 1; ft.alpha -= 0.02; });
+                floatingTexts = floatingTexts.filter(ft => ft.alpha > 0);
+            }
+
+            function draw() {
+                ctx.fillStyle = '#070A12';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Targets
+                targets.forEach(t => {
+                    if (t.sliced) return;
+                    ctx.save();
+                    ctx.translate(t.x, t.y);
+                    ctx.rotate(t.rot);
+                    ctx.shadowColor = t.color;
+                    ctx.shadowBlur = 12;
+                    ctx.fillStyle = t.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, t.radius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Inner icon
+                    ctx.shadowBlur = 0;
+                    ctx.font = (t.radius * 1.1) + 'px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(t.label, 0, 2);
+                    ctx.restore();
+                });
+
+                // Particles
+                particles.forEach(p => {
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.shadowColor = p.color;
+                    ctx.shadowBlur = 6;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                });
+
+                // Neon Blade Trail
+                if (bladeTrail.length > 1) {
+                    ctx.save();
+                    ctx.strokeStyle = '#38BDF8';
+                    ctx.lineWidth = 6;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.shadowColor = '#00F0FF';
+                    ctx.shadowBlur = 14;
+                    ctx.beginPath();
+                    ctx.moveTo(bladeTrail[0].x, bladeTrail[0].y);
+                    for (let i = 1; i < bladeTrail.length; i++) {
+                        ctx.lineTo(bladeTrail[i].x, bladeTrail[i].y);
+                    }
+                    ctx.stroke();
+
+                    // Inner bright core
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Floating combo text
+                floatingTexts.forEach(ft => {
+                    ctx.save();
+                    ctx.globalAlpha = ft.alpha;
+                    ctx.fillStyle = ft.color;
+                    ctx.font = 'bold 20px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(ft.text, ft.x, ft.y);
+                    ctx.restore();
+                });
+
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(7, 10, 18, 0.88)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#EF4444';
+                    ctx.font = 'bold 30px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+                    ctx.fillStyle = '#38BDF8';
+                    ctx.font = 'bold 22px sans-serif';
+                    ctx.fillText('Score: ' + score, canvas.width / 2, canvas.height / 2 + 20);
+                    ctx.fillStyle = '#94A3B8';
+                    ctx.font = '15px sans-serif';
+                    ctx.fillText('Tap Restart to slice again', canvas.width / 2, canvas.height / 2 + 55);
+                }
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            initGame();
+            loop();
+        </script>
+    </body>
+    </html>
+    """.trimIndent()
+
+    // 12. GAME: PIXEL CROSSING (Crossy Road Style)
+    private fun getCrossingHtml(): String = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Pixel Crossing</title>
+        $COMMON_HEAD
+        <style>
+            .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100% - 50px); padding: 4px; }
+            #crossing-canvas {
+                background: #090D16;
+                border: 2px solid #1E293B;
+                border-radius: 12px;
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+                max-width: 96vw;
+                height: 82vh;
+                touch-action: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="hud">
+            <div><span style="color:#94A3B8;">DISTANCE: </span><span id="score" class="badge">0</span></div>
+            <div><span style="color:#94A3B8;">BEST: </span><span id="best" class="badge">0</span></div>
+            <button class="btn" onclick="initGame()">Restart</button>
+        </div>
+        <div class="container">
+            <canvas id="crossing-canvas" width="380" height="580"></canvas>
+        </div>
+
+        <script>
+            const canvas = document.getElementById('crossing-canvas');
+            const ctx = canvas.getContext('2d');
+
+            const GRID_SIZE = 38;
+            const COLS = Math.floor(canvas.width / GRID_SIZE); // 10
+            const VISIBLE_ROWS = Math.floor(canvas.height / GRID_SIZE) + 2;
+
+            let player = { col: 5, row: 0, hopProgress: 0 };
+            let maxRow = 0;
+            let best = parseInt(SafeStorage.getItem('crossing_best') || '0', 10);
+            document.getElementById('best').innerText = best;
+
+            let lanes = [];
+            let gameOver = false;
+            let cameraRow = 0;
+            let idleTimer = Date.now();
+
+            const LANE_TYPES = {
+                GRASS: { color: '#0F291E', obstacleColor: '#059669' },
+                ROAD: { color: '#181E29', obstacleColor: '#EF4444' },
+                HIGHWAY: { color: '#111827', obstacleColor: '#F59E0B' },
+                RIVER: { color: '#0C2847', obstacleColor: '#854D0E' },
+                RAIL: { color: '#1E1B4B', obstacleColor: '#A855F7' }
+            };
+
+            function generateLane(row) {
+                if (row <= 2) return { type: 'GRASS', row, obstacles: [] };
+                const rand = Math.random();
+                let type = 'GRASS';
+                if (rand < 0.35) type = 'ROAD';
+                else if (rand < 0.55) type = 'HIGHWAY';
+                else if (rand < 0.75) type = 'RIVER';
+                else if (rand < 0.90) type = 'RAIL';
+
+                const dir = Math.random() < 0.5 ? 1 : -1;
+                const speed = (type === 'HIGHWAY' ? 3.5 : (type === 'RAIL' ? 8 : (type === 'RIVER' ? 1.8 : 2.2))) * dir;
+                let obstacles = [];
+                const count = type === 'RAIL' ? 1 : Math.floor(Math.random() * 2) + 2;
+                const spacing = canvas.width / count;
+                for (let i = 0; i < count; i++) {
+                    const width = type === 'RIVER' ? (60 + Math.random() * 30) : (type === 'HIGHWAY' ? 55 : (type === 'RAIL' ? 180 : 45));
+                    obstacles.push({
+                        x: i * spacing + Math.random() * 30,
+                        width,
+                        speed
+                    });
+                }
+                return { type, row, speed, obstacles };
+            }
+
+            function initGame() {
+                player = { col: 4, row: 0, hopProgress: 0 };
+                maxRow = 0; cameraRow = 0; gameOver = false;
+                idleTimer = Date.now();
+                lanes = [];
+                for (let r = 0; r < 25; r++) lanes.push(generateLane(r));
+                document.getElementById('score').innerText = 0;
+                AudioFX.play('tap');
+            }
+
+            function hop(dCol, dRow) {
+                if (gameOver) { initGame(); return; }
+                const newCol = Math.max(0, Math.min(COLS - 1, player.col + dCol));
+                const newRow = Math.max(0, player.row + dRow);
+                player.col = newCol;
+                player.row = newRow;
+                idleTimer = Date.now();
+                AudioFX.play('move');
+                AudioFX.vibrate(12);
+
+                if (newRow > maxRow) {
+                    maxRow = newRow;
+                    document.getElementById('score').innerText = maxRow;
+                    if (maxRow > best) {
+                        best = maxRow;
+                        SafeStorage.setItem('crossing_best', best);
+                        document.getElementById('best').innerText = best;
+                    }
+                    while (lanes.length <= maxRow + 20) {
+                        lanes.push(generateLane(lanes.length));
+                    }
+                }
+            }
+
+            // Mobile Touch: Tap anywhere to hop forward, swipe left/right/down
+            let tsX = 0, tsY = 0, tsTime = 0;
+            canvas.addEventListener('touchstart', e => {
+                tsX = e.touches[0].clientX;
+                tsY = e.touches[0].clientY;
+                tsTime = Date.now();
+            }, { passive: true });
+
+            canvas.addEventListener('touchend', e => {
+                const dx = e.changedTouches[0].clientX - tsX;
+                const dy = e.changedTouches[0].clientY - tsY;
+                const dt = Date.now() - tsTime;
+                const absDx = Math.abs(dx);
+                const absDy = Math.abs(dy);
+
+                if (absDx < 15 && absDy < 15 && dt < 280) {
+                    hop(0, 1); // Tap = hop forward!
+                } else if (absDx > absDy && absDx > 20) {
+                    hop(dx > 0 ? 1 : -1, 0); // Swipe sideways
+                } else if (absDy > absDx && absDy > 20) {
+                    hop(0, dy > 0 ? -1 : 1); // Swipe up = forward, swipe down = back
+                }
+            }, { passive: true });
+
+            function update() {
+                if (gameOver) return;
+                // Camera lerp
+                const targetCam = Math.max(0, player.row - 3);
+                cameraRow += (targetCam - cameraRow) * 0.1;
+
+                // Move obstacles
+                lanes.forEach(lane => {
+                    lane.obstacles.forEach(obs => {
+                        obs.x += obs.speed;
+                        if (obs.speed > 0 && obs.x > canvas.width + 60) obs.x = -obs.width - 20;
+                        if (obs.speed < 0 && obs.x < -obs.width - 60) obs.x = canvas.width + 20;
+                    });
+                });
+
+                // Collision check
+                const currentLane = lanes[player.row];
+                if (currentLane) {
+                    const px = player.col * GRID_SIZE + GRID_SIZE / 2;
+                    if (currentLane.type === 'ROAD' || currentLane.type === 'HIGHWAY' || currentLane.type === 'RAIL') {
+                        currentLane.obstacles.forEach(obs => {
+                            if (px > obs.x - 8 && px < obs.x + obs.width + 8) {
+                                gameOver = true;
+                                AudioFX.play('over');
+                                AudioFX.vibrate(40);
+                            }
+                        });
+                    } else if (currentLane.type === 'RIVER') {
+                        // Must be on log
+                        let onLog = false;
+                        currentLane.obstacles.forEach(obs => {
+                            if (px > obs.x && px < obs.x + obs.width) {
+                                onLog = true;
+                                player.col += (obs.speed / GRID_SIZE);
+                            }
+                        });
+                        if (!onLog || player.col < 0 || player.col >= COLS) {
+                            gameOver = true;
+                            AudioFX.play('boom');
+                            AudioFX.vibrate(40);
+                        }
+                    }
+                }
+
+                // Idle eagle/drone penalty
+                if (Date.now() - idleTimer > 6500) {
+                    gameOver = true;
+                    AudioFX.play('over');
+                }
+            }
+
+            function draw() {
+                ctx.fillStyle = '#090D16';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Render lanes
+                const baseScreenY = canvas.height - 120;
+                lanes.forEach(lane => {
+                    const sy = baseScreenY - (lane.row - cameraRow) * GRID_SIZE;
+                    if (sy < -GRID_SIZE || sy > canvas.height + GRID_SIZE) return;
+
+                    const cfg = LANE_TYPES[lane.type] || LANE_TYPES.GRASS;
+                    ctx.fillStyle = cfg.color;
+                    ctx.fillRect(0, sy, canvas.width, GRID_SIZE);
+
+                    // Lane line details
+                    if (lane.type === 'ROAD' || lane.type === 'HIGHWAY') {
+                        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                        ctx.fillRect(0, sy + GRID_SIZE - 2, canvas.width, 2);
+                    } else if (lane.type === 'RAIL') {
+                        ctx.fillStyle = '#4B5563';
+                        ctx.fillRect(0, sy + 6, canvas.width, 4);
+                        ctx.fillRect(0, sy + GRID_SIZE - 10, canvas.width, 4);
+                    }
+
+                    // Obstacles
+                    lane.obstacles.forEach(obs => {
+                        ctx.save();
+                        ctx.fillStyle = cfg.obstacleColor;
+                        ctx.shadowColor = cfg.obstacleColor;
+                        ctx.shadowBlur = 6;
+                        ctx.fillRect(obs.x, sy + 4, obs.width, GRID_SIZE - 8);
+                        // Windshield / log texture
+                        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                        ctx.fillRect(obs.x + 4, sy + 7, obs.width - 8, 4);
+                        ctx.restore();
+                    });
+                });
+
+                // Player
+                const psy = baseScreenY - (player.row - cameraRow) * GRID_SIZE;
+                const psx = Math.max(0, Math.min(canvas.width - GRID_SIZE, player.col * GRID_SIZE));
+                ctx.save();
+                ctx.fillStyle = '#38BDF8';
+                ctx.shadowColor = '#38BDF8';
+                ctx.shadowBlur = 12;
+                ctx.fillRect(psx + 6, psy + 6, GRID_SIZE - 12, GRID_SIZE - 12);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(psx + 12, psy + 10, 4, 4);
+                ctx.fillRect(psx + GRID_SIZE - 16, psy + 10, 4, 4);
+                ctx.restore();
+
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(9, 13, 22, 0.88)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#EF4444';
+                    ctx.font = 'bold 30px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('CRASHED!', canvas.width / 2, canvas.height / 2 - 20);
+                    ctx.fillStyle = '#38BDF8';
+                    ctx.font = 'bold 22px sans-serif';
+                    ctx.fillText('Distance: ' + maxRow + ' steps', canvas.width / 2, canvas.height / 2 + 20);
+                    ctx.fillStyle = '#94A3B8';
+                    ctx.font = '15px sans-serif';
+                    ctx.fillText('Tap anywhere to try again', canvas.width / 2, canvas.height / 2 + 55);
+                }
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            initGame();
+            loop();
+        </script>
+    </body>
+    </html>
+    """.trimIndent()
+
+    // 13. GAME: JETPACK RUSH (Jetpack Joyride Style)
+    private fun getJetpackHtml(): String = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Jetpack Rush</title>
+        $COMMON_HEAD
+        <style>
+            .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100% - 50px); padding: 4px; }
+            #jetpack-canvas {
+                background: #0B0F19;
+                border: 2px solid #1E293B;
+                border-radius: 12px;
+                box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+                max-width: 96vw;
+                height: 82vh;
+                touch-action: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="hud">
+            <div><span style="color:#94A3B8;">DIST: </span><span id="dist" class="badge">0m</span></div>
+            <div><span style="color:#94A3B8;">COINS: </span><span id="coins" class="badge">0</span></div>
+            <div><span style="color:#94A3B8;">BEST: </span><span id="best" class="badge">0m</span></div>
+            <button class="btn" onclick="initGame()">Restart</button>
+        </div>
+        <div class="container">
+            <canvas id="jetpack-canvas" width="380" height="580"></canvas>
+        </div>
+
+        <script>
+            const canvas = document.getElementById('jetpack-canvas');
+            const ctx = canvas.getContext('2d');
+
+            let playerY = 480, playerVy = 0;
+            let isThrusting = false;
+            let distance = 0, coins = 0;
+            let gameOver = false;
+            let best = parseInt(SafeStorage.getItem('jetpack_best') || '0', 10);
+            document.getElementById('best').innerText = best + 'm';
+
+            let zappers = [];
+            let coinPickups = [];
+            let exhaustParticles = [];
+            let lastSpawnDist = 0;
+
+            const GRAVITY = 0.42;
+            const THRUST = -0.75;
+            const SPEED = 4.2;
+
+            function initGame() {
+                playerY = 480; playerVy = 0; isThrusting = false;
+                distance = 0; coins = 0; gameOver = false;
+                zappers = []; coinPickups = []; exhaustParticles = [];
+                lastSpawnDist = 0;
+                document.getElementById('dist').innerText = '0m';
+                document.getElementById('coins').innerText = '0';
+                AudioFX.play('tap');
+            }
+
+            function spawnObstacle() {
+                const y = 80 + Math.random() * (canvas.height - 220);
+                const isRotated = Math.random() < 0.35;
+                zappers.push({
+                    x: canvas.width + 30,
+                    y,
+                    len: 90,
+                    angle: isRotated ? Math.PI / 4 : 0,
+                    active: true
+                });
+
+                // Spawn a line of coins
+                const coinY = 70 + Math.random() * (canvas.height - 200);
+                for (let i = 0; i < 5; i++) {
+                    coinPickups.push({
+                        x: canvas.width + 120 + i * 28,
+                        y: coinY + Math.sin(i * 0.5) * 20,
+                        collected: false
+                    });
+                }
+            }
+
+            // Mobile Touch: Touch and hold anywhere to fire jetpack thruster
+            document.body.addEventListener('touchstart', e => {
+                if (e.target.closest('.hud')) return;
+                e.preventDefault();
+                isThrusting = true;
+                AudioFX.init();
+                AudioFX.vibrate(10);
+            }, { passive: false });
+
+            document.body.addEventListener('touchend', e => {
+                if (e.target.closest('.hud')) return;
+                isThrusting = false;
+            });
+
+            document.body.addEventListener('mousedown', e => {
+                if (e.target.closest('.hud')) return;
+                isThrusting = true;
+            });
+            document.body.addEventListener('mouseup', () => { isThrusting = false; });
+
+            function update() {
+                if (gameOver) return;
+
+                distance += 1;
+                document.getElementById('dist').innerText = Math.floor(distance / 5) + 'm';
+                if (Math.floor(distance / 5) > best) {
+                    best = Math.floor(distance / 5);
+                    SafeStorage.setItem('jetpack_best', best);
+                    document.getElementById('best').innerText = best + 'm';
+                }
+
+                if (distance - lastSpawnDist > 200) {
+                    spawnObstacle();
+                    lastSpawnDist = distance;
+                }
+
+                // Physics
+                if (isThrusting) {
+                    playerVy += THRUST;
+                    playerVy = Math.max(-8, playerVy);
+                    // Exhaust particles
+                    exhaustParticles.push({
+                        x: 60, y: playerY + 24,
+                        vx: -3 - Math.random() * 2,
+                        vy: 4 + Math.random() * 4,
+                        radius: 3 + Math.random() * 3,
+                        alpha: 1.0,
+                        color: Math.random() < 0.5 ? '#F59E0B' : '#EF4444'
+                    });
+                } else {
+                    playerVy += GRAVITY;
+                    playerVy = Math.min(8, playerVy);
+                }
+
+                playerY += playerVy;
+                // Floor and ceiling
+                const floorY = canvas.height - 50;
+                if (playerY > floorY) { playerY = floorY; playerVy = 0; }
+                if (playerY < 50) { playerY = 50; playerVy = 0; }
+
+                // Exhaust particles update
+                exhaustParticles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy; p.alpha -= 0.05;
+                });
+                exhaustParticles = exhaustParticles.filter(p => p.alpha > 0);
+
+                // Zappers update & collision
+                zappers.forEach(z => {
+                    z.x -= SPEED;
+                    // Circle distance check on zapper ends
+                    const x1 = z.x, y1 = z.y;
+                    const x2 = z.x + Math.cos(z.angle) * z.len;
+                    const y2 = z.y + Math.sin(z.angle) * z.len;
+
+                    // Check player distance to segment
+                    const px = 70, py = playerY + 12;
+                    const l2 = (x2-x1)**2 + (y2-y1)**2;
+                    let u = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2;
+                    u = Math.max(0, Math.min(1, u));
+                    const nx = x1 + u*(x2-x1), ny = y1 + u*(y2-y1);
+                    if (Math.hypot(px - nx, py - ny) < 18) {
+                        gameOver = true;
+                        AudioFX.play('over');
+                        AudioFX.vibrate(40);
+                    }
+                });
+                zappers = zappers.filter(z => z.x > -120);
+
+                // Coins update
+                coinPickups.forEach(c => {
+                    c.x -= SPEED;
+                    if (!c.collected && Math.hypot(70 - c.x, (playerY + 12) - c.y) < 22) {
+                        c.collected = true;
+                        coins += 1;
+                        document.getElementById('coins').innerText = coins;
+                        AudioFX.play('score');
+                        AudioFX.vibrate(10);
+                    }
+                });
+                coinPickups = coinPickups.filter(c => c.x > -40);
+            }
+
+            function draw() {
+                ctx.fillStyle = '#0B0F19';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Floor and ceiling
+                ctx.fillStyle = '#1E293B';
+                ctx.fillRect(0, 0, canvas.width, 40);
+                ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+                ctx.fillStyle = '#38BDF8';
+                ctx.fillRect(0, 38, canvas.width, 2);
+                ctx.fillRect(0, canvas.height - 40, canvas.width, 2);
+
+                // Exhaust particles
+                exhaustParticles.forEach(p => {
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                });
+
+                // Coins
+                coinPickups.forEach(c => {
+                    if (c.collected) return;
+                    ctx.save();
+                    ctx.fillStyle = '#FBBF24';
+                    ctx.shadowColor = '#FBBF24';
+                    ctx.shadowBlur = 8;
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#78350F';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('$', c.x, c.y + 1);
+                    ctx.restore();
+                });
+
+                // Zappers
+                zappers.forEach(z => {
+                    const x2 = z.x + Math.cos(z.angle) * z.len;
+                    const y2 = z.y + Math.sin(z.angle) * z.len;
+                    ctx.save();
+                    ctx.strokeStyle = '#F59E0B';
+                    ctx.lineWidth = 6;
+                    ctx.shadowColor = '#EF4444';
+                    ctx.shadowBlur = 12;
+                    ctx.beginPath();
+                    ctx.moveTo(z.x, z.y);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+
+                    // Electrodes
+                    ctx.fillStyle = '#38BDF8';
+                    ctx.beginPath(); ctx.arc(z.x, z.y, 9, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(x2, y2, 9, 0, Math.PI*2); ctx.fill();
+                    ctx.restore();
+                });
+
+                // Player & Jetpack
+                ctx.save();
+                ctx.translate(65, playerY);
+                // Jetpack unit
+                ctx.fillStyle = '#64748B';
+                ctx.fillRect(-10, 4, 8, 16);
+                // Body
+                ctx.fillStyle = '#38BDF8';
+                ctx.shadowColor = '#38BDF8';
+                ctx.shadowBlur = 8;
+                ctx.fillRect(0, 0, 16, 24);
+                // Visor
+                ctx.fillStyle = '#F8FAFC';
+                ctx.fillRect(8, 4, 8, 6);
+                ctx.restore();
+
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(11, 15, 25, 0.88)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#EF4444';
+                    ctx.font = 'bold 30px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('ZAPPED!', canvas.width / 2, canvas.height / 2 - 20);
+                    ctx.fillStyle = '#38BDF8';
+                    ctx.font = 'bold 22px sans-serif';
+                    ctx.fillText(Math.floor(distance / 5) + 'm | ' + coins + ' Coins', canvas.width / 2, canvas.height / 2 + 20);
+                    ctx.fillStyle = '#94A3B8';
+                    ctx.font = '15px sans-serif';
+                    ctx.fillText('Tap Restart to launch again', canvas.width / 2, canvas.height / 2 + 55);
+                }
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            initGame();
+            loop();
+        </script>
+    </body>
+    </html>
+    """.trimIndent()
 }
+
