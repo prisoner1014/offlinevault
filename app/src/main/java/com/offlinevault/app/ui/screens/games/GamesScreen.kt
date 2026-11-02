@@ -68,7 +68,7 @@ fun GamesScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "10 Built-In Offline Games • No Internet Required",
+                    text = "${OfflineGameCatalog.games.size} Built-In Offline Games • No Internet Required",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -95,7 +95,7 @@ fun GamesScreen(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search 10 offline games...") },
+            placeholder = { Text("Search ${OfflineGameCatalog.games.size} offline games...") },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = "Search")
             },

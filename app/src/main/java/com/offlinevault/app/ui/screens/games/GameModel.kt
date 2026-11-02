@@ -158,6 +158,26 @@ object OfflineGameCatalog {
             description = "Thrust through a high-tech obstacle laboratory. Dodge electric zappers, laser grids, and homing missiles while collecting energy credits.",
             badge = "Reflex Hit",
             instructions = "Touch and hold anywhere to fire bullet thrusters and lift off. Release to drop with gravity. Dodge electric zapper fields and collect floating energy credits."
+        ),
+        GameDefinition(
+            id = "hillclimb",
+            title = "Hill Climb Racer",
+            subtitle = "Physics 2D jeep hill climber",
+            category = GameCategory.ARCADE,
+            icon = Icons.Default.DirectionsCar,
+            description = "Drive your physics jeep across rugged terrain. Balance throttle and brake, grab gas cans, and avoid flipping over!",
+            badge = "Physics Hit",
+            instructions = "Hold GAS (Right) to accelerate forward and tilt counter-clockwise in mid-air. Hold BRAKE (Left) to reverse and tilt clockwise. Collect coins and green gas cans to keep moving without running out of fuel!"
+        ),
+        GameDefinition(
+            id = "altos",
+            title = "Alto's Mountain Slide",
+            subtitle = "Zen downhill snowboard tricks",
+            category = GameCategory.ARCADE,
+            icon = Icons.Default.Terrain,
+            description = "Glide across endless alpine hills at dusk. Jump chasms, bounce off rocky crags, and pull off backflips under a serene pastel sky.",
+            badge = "Endless Zen",
+            instructions = "Tap anywhere to jump. Touch and hold while in mid-air to rotate backflips! Land cleanly on your board to gain massive speed boosts and lengthen your fluttering scarf."
         )
     )
 

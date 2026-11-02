@@ -13,16 +13,28 @@ data class VersionRelease(
 object AppVersionInfo {
     const val APP_NAME = "Offline Vault"
     const val APP_TAGLINE = "All-in-One Private Offline Knowledge & Media Suite"
-    const val CURRENT_VERSION_NAME = "1.5.0"
-    const val CURRENT_VERSION_CODE = 12
-    const val CURRENT_SERIAL_NUMBER = "OV-20261102-AUTO-ARM64"
-    const val BUILD_CHANNEL = "Production / Fold & Automotive Edition"
+    const val CURRENT_VERSION_NAME = "1.6.0"
+    const val CURRENT_VERSION_CODE = 13
+    const val CURRENT_SERIAL_NUMBER = "OV-20261102-SHUFFLE-GAMES-ARM64"
+    const val BUILD_CHANNEL = "Production / Fold, Auto & AI Edition"
     const val BUILD_DATE = "November 2, 2026"
     const val TARGET_HARDWARE = "Samsung Galaxy Fold & Foldable Architecture"
     const val PRIMARY_ABI = "arm64-v8a (64-bit Native Execution)"
     const val NEURAL_ENGINE = "llama.cpp v0.1.1 (libllama.so + libllama_jni.so)"
 
     val versionHistory = listOf(
+        VersionRelease(
+            versionName = "1.6.0",
+            versionCode = 13,
+            serialNumber = "OV-20261102-SHUFFLE-GAMES-ARM64",
+            releaseDate = "November 2, 2026",
+            highlights = listOf(
+                "Android Auto Drive Shuffle: 1-tap instant continuous mix of podcasts, video soundtracks, and books.",
+                "In-Dash Playback Speed Toggle: 1.0x, 1.25x, 1.5x, 1.75x, and 2.0x controls directly on car touchscreen.",
+                "On-Device AI Car Briefings: Executive spoken summaries of saved web articles and news dispatches.",
+                "Batch 2 Offline Games: Hill Climb Racer 2D (pedal physics, fuel cans, rollover crash) and Alto's Mountain Slide (zen downhill backflips, fluttering scarf)."
+            )
+        ),
         VersionRelease(
             versionName = "1.5.0",
             versionCode = 12,

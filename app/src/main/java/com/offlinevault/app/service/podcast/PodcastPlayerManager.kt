@@ -223,6 +223,15 @@ object PodcastPlayerManager {
         exoPlayer?.setPlaybackSpeed(speed)
     }
 
+    fun cycleSpeed(): Float {
+        val speeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+        val currentIndex = speeds.indexOfFirst { kotlin.math.abs(it - playbackSpeed) < 0.05f }
+        val nextIndex = if (currentIndex >= 0) (currentIndex + 1) % speeds.size else 0
+        val nextSpeed = speeds[nextIndex]
+        setSpeed(nextSpeed)
+        return nextSpeed
+    }
+
     fun stopAndDismiss() {
         persistCurrentPosition()
         stopTicker()

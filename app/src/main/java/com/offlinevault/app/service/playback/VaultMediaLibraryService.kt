@@ -24,6 +24,8 @@ import com.offlinevault.app.data.local.AppDatabase
 import com.offlinevault.app.data.local.entity.BookEntity
 import com.offlinevault.app.data.local.entity.DownloadEntity
 import com.offlinevault.app.data.local.entity.EpisodeEntity
+import com.offlinevault.app.service.ai.AiBriefingManager
+import com.offlinevault.app.service.ai.AiBriefingItem
 import com.offlinevault.app.service.podcast.PodcastPlayerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +38,8 @@ class VaultMediaLibraryService : MediaLibraryService() {
 
     companion object {
         const val ROOT_ID = "root"
+        const val CAT_DRIVE_SHUFFLE = "cat_drive_shuffle"
+        const val CAT_AI_BRIEFINGS = "cat_ai_briefings"
         const val CAT_PODCASTS = "cat_podcasts"
         const val CAT_VIDEOS = "cat_videos"
         const val CAT_BOOKS = "cat_books"
@@ -43,9 +47,11 @@ class VaultMediaLibraryService : MediaLibraryService() {
         const val PREFIX_PODCAST = "pod_"
         const val PREFIX_VIDEO = "vid_"
         const val PREFIX_BOOK = "book_"
+        const val PREFIX_BRIEFING = "briefing_"
 
         const val ACTION_REWIND_10 = "com.offlinevault.app.action.REWIND_10"
         const val ACTION_FORWARD_30 = "com.offlinevault.app.action.FORWARD_30"
+        const val ACTION_CYCLE_SPEED = "com.offlinevault.app.action.CYCLE_SPEED"
     }
 
     private var mediaLibrarySession: MediaLibrarySession? = null
@@ -56,7 +62,7 @@ class VaultMediaLibraryService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize Android TextToSpeech engine for Book Read Aloud
+        // Initialize Android TextToSpeech engine for Book Read Aloud & AI Car Briefings
         tts = TextToSpeech(applicationContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.US
@@ -87,9 +93,15 @@ class VaultMediaLibraryService : MediaLibraryService() {
             .setSessionCommand(SessionCommand(ACTION_FORWARD_30, Bundle.EMPTY))
             .build()
 
+        val speedButton = CommandButton.Builder()
+            .setDisplayName("Playback Speed")
+            .setIconResId(android.R.drawable.ic_menu_recent_history)
+            .setSessionCommand(SessionCommand(ACTION_CYCLE_SPEED, Bundle.EMPTY))
+            .build()
+
         mediaLibrarySession = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(pendingIntent)
-            .setCustomLayout(ImmutableList.of(rewindButton, forwardButton))
+            .setCustomLayout(ImmutableList.of(rewindButton, forwardButton, speedButton))
             .build()
     }
 
@@ -144,7 +156,21 @@ class VaultMediaLibraryService : MediaLibraryService() {
 
                     when (parentId) {
                         ROOT_ID -> {
-                            // Top-Level 3 Media Pillars for Android Auto Dashboard
+                            // Top-Level Media Pillars for Android Auto Dashboard
+                            items.add(
+                                createCategoryItem(
+                                    CAT_DRIVE_SHUFFLE,
+                                    "🚗 Drive Shuffle (Instant Play)",
+                                    "Continuous offline mix of podcasts, video audio & books"
+                                )
+                            )
+                            items.add(
+                                createCategoryItem(
+                                    CAT_AI_BRIEFINGS,
+                                    "🧠 AI Car Briefings",
+                                    "Executive audio summaries of saved articles & news"
+                                )
+                            )
                             items.add(
                                 createCategoryItem(
                                     CAT_PODCASTS,
@@ -166,6 +192,114 @@ class VaultMediaLibraryService : MediaLibraryService() {
                                     "Listen to saved books narrated by voice"
                                 )
                             )
+                        }
+
+                        CAT_DRIVE_SHUFFLE -> {
+                            // Pillar 0: Drive Shuffle - All offline media mixed together
+                            val mixedList = mutableListOf<MediaItem>()
+
+                            // 1. Briefings
+                            val briefings = AiBriefingManager.getBriefings(applicationContext)
+                            for (b in briefings) {
+                                mixedList.add(
+                                    MediaItem.Builder()
+                                        .setMediaId("$PREFIX_BRIEFING${b.id}")
+                                        .setMediaMetadata(
+                                            MediaMetadata.Builder()
+                                                .setTitle(b.title)
+                                                .setArtist(b.subtitle)
+                                                .setAlbumTitle("AI Car Briefings")
+                                                .setIsPlayable(true)
+                                                .setIsBrowsable(false)
+                                                .build()
+                                        )
+                                        .build()
+                                )
+                            }
+
+                            // 2. Podcasts
+                            val episodes: List<EpisodeEntity> = db.feedDao().getDownloadedEpisodesList()
+                            for (ep in episodes) {
+                                val artUri = if (!ep.imageUrl.isNullOrBlank()) Uri.parse(ep.imageUrl) else null
+                                mixedList.add(
+                                    MediaItem.Builder()
+                                        .setMediaId("$PREFIX_PODCAST${ep.id}")
+                                        .setMediaMetadata(
+                                            MediaMetadata.Builder()
+                                                .setTitle(ep.title)
+                                                .setArtist("Podcast Episode")
+                                                .setAlbumTitle("Offline Podcasts")
+                                                .setArtworkUri(artUri)
+                                                .setIsPlayable(true)
+                                                .setIsBrowsable(false)
+                                                .build()
+                                        )
+                                        .build()
+                                )
+                            }
+
+                            // 3. Videos (Audio-Only)
+                            val videos: List<DownloadEntity> = db.downloadDao().getCompletedVideosList()
+                            for (vid in videos) {
+                                mixedList.add(
+                                    MediaItem.Builder()
+                                        .setMediaId("$PREFIX_VIDEO${vid.id}")
+                                        .setMediaMetadata(
+                                            MediaMetadata.Builder()
+                                                .setTitle(vid.title)
+                                                .setArtist("Downloaded Video")
+                                                .setAlbumTitle("Video Audio")
+                                                .setIsPlayable(true)
+                                                .setIsBrowsable(false)
+                                                .build()
+                                        )
+                                        .build()
+                                )
+                            }
+
+                            // 4. Books
+                            val books: List<BookEntity> = db.bookDao().getDownloadedBooksList()
+                            for (book in books) {
+                                val artUri = if (!book.coverUrl.isNullOrBlank()) Uri.parse(book.coverUrl) else null
+                                mixedList.add(
+                                    MediaItem.Builder()
+                                        .setMediaId("$PREFIX_BOOK${book.id}")
+                                        .setMediaMetadata(
+                                            MediaMetadata.Builder()
+                                                .setTitle(book.title)
+                                                .setArtist(book.author ?: "Author")
+                                                .setAlbumTitle("Audiobooks & Reader")
+                                                .setArtworkUri(artUri)
+                                                .setIsPlayable(true)
+                                                .setIsBrowsable(false)
+                                                .build()
+                                        )
+                                        .build()
+                                )
+                            }
+
+                            // Interleave/shuffle for continuous driving playback
+                            mixedList.shuffle()
+                            items.addAll(mixedList)
+                        }
+
+                        CAT_AI_BRIEFINGS -> {
+                            val briefings = AiBriefingManager.getBriefings(applicationContext)
+                            for (b in briefings) {
+                                val item = MediaItem.Builder()
+                                    .setMediaId("$PREFIX_BRIEFING${b.id}")
+                                    .setMediaMetadata(
+                                        MediaMetadata.Builder()
+                                            .setTitle(b.title)
+                                            .setArtist(b.subtitle)
+                                            .setAlbumTitle("AI Car Briefings")
+                                            .setIsPlayable(true)
+                                            .setIsBrowsable(false)
+                                            .build()
+                                    )
+                                    .build()
+                                items.add(item)
+                            }
                         }
 
                         CAT_PODCASTS -> {
@@ -307,6 +441,10 @@ class VaultMediaLibraryService : MediaLibraryService() {
                     PodcastPlayerManager.seekRelative(30000L)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
+                ACTION_CYCLE_SPEED -> {
+                    PodcastPlayerManager.cycleSpeed()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             }
             return super.onCustomCommand(session, controller, customCommand, args)
         }
@@ -369,6 +507,21 @@ class VaultMediaLibraryService : MediaLibraryService() {
                             .setTitle(book.title)
                             .setArtist(book.author ?: "Author")
                             .setArtworkUri(artUri)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            }
+            mediaId.startsWith(PREFIX_BRIEFING) -> {
+                val bId = mediaId.removePrefix(PREFIX_BRIEFING)
+                val briefing = AiBriefingManager.getBriefings(applicationContext).firstOrNull { it.id == bId } ?: return null
+                MediaItem.Builder()
+                    .setMediaId(mediaId)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(briefing.title)
+                            .setArtist(briefing.subtitle)
+                            .setAlbumTitle("AI Car Briefings")
                             .setIsPlayable(true)
                             .build()
                     )
@@ -449,8 +602,45 @@ class VaultMediaLibraryService : MediaLibraryService() {
                     )
                     .build()
             }
+            mediaId.startsWith(PREFIX_BRIEFING) -> {
+                val bId = mediaId.removePrefix(PREFIX_BRIEFING)
+                val briefing = AiBriefingManager.getBriefings(applicationContext).firstOrNull { it.id == bId } ?: return null
+                val audioUri = synthesizeBriefingAudio(briefing) ?: return null
+
+                MediaItem.Builder()
+                    .setMediaId(mediaId)
+                    .setUri(audioUri)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(briefing.title)
+                            .setArtist(briefing.subtitle)
+                            .setAlbumTitle("AI Car Briefings")
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            }
             else -> null
         }
+    }
+
+    private fun synthesizeBriefingAudio(briefing: AiBriefingItem): Uri? {
+        val cacheDir = File(cacheDir, "briefing_audio").apply { if (!exists()) mkdirs() }
+        val targetFile = File(cacheDir, "briefing_${briefing.id}.wav")
+
+        if (targetFile.exists() && targetFile.length() > 1024) {
+            return Uri.fromFile(targetFile)
+        }
+
+        if (ttsReady && tts != null) {
+            val params = Bundle()
+            tts?.synthesizeToFile(briefing.summaryText, params, targetFile, "briefing_${briefing.id}")
+            Thread.sleep(400)
+            if (targetFile.exists()) {
+                return Uri.fromFile(targetFile)
+            }
+        }
+        return null
     }
 
     private fun synthesizeBookChapterAudio(book: BookEntity): Uri? {

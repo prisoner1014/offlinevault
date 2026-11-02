@@ -199,6 +199,8 @@ object GameHtmlProvider {
             "slicer" -> getSlicerHtml()
             "crossing" -> getCrossingHtml()
             "jetpack" -> getJetpackHtml()
+            "hillclimb" -> getHillClimbHtml()
+            "altos" -> getAltosSlideHtml()
             else -> get2048Html()
         }
     }
@@ -3235,5 +3237,737 @@ object GameHtmlProvider {
     </body>
     </html>
     """.trimIndent()
+
+    // 14. GAME: HILL CLIMB RACER
+    private fun getHillClimbHtml(): String = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Hill Climb Racer</title>
+        $COMMON_HEAD
+        <style>
+            .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100% - 50px); padding: 4px; }
+            #hill-canvas {
+                background: #090D16;
+                border: 2px solid #1E293B;
+                border-radius: 12px;
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+                max-width: 96vw;
+                height: 72vh;
+                touch-action: none;
+            }
+            .pedals {
+                display: flex;
+                justify-content: space-between;
+                width: 100%;
+                max-width: 380px;
+                padding: 6px 12px;
+                margin-top: 6px;
+                touch-action: none;
+            }
+            .pedal {
+                flex: 1;
+                margin: 0 8px;
+                height: 54px;
+                border-radius: 14px;
+                font-size: 15px;
+                font-weight: 800;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                border: 2px solid;
+                cursor: pointer;
+            }
+            .pedal-brake { background: rgba(239, 68, 68, 0.2); border-color: #EF4444; color: #EF4444; }
+            .pedal-brake:active, .pedal-brake.active { background: #EF4444 !important; color: #FFFFFF !important; transform: scale(0.94); }
+            .pedal-gas { background: rgba(16, 185, 129, 0.2); border-color: #10B981; color: #10B981; }
+            .pedal-gas:active, .pedal-gas.active { background: #10B981 !important; color: #FFFFFF !important; transform: scale(0.94); }
+        </style>
+    </head>
+    <body>
+        <div class="hud">
+            <div><span style="color:#94A3B8;">DIST: </span><span id="dist" class="badge">0m</span></div>
+            <div><span style="color:#94A3B8;">FUEL: </span><span id="fuel" class="badge" style="color:#10B981;">100%</span></div>
+            <div><span style="color:#94A3B8;">COINS: </span><span id="coins" class="badge">0</span></div>
+            <button class="btn" onclick="initGame()">Restart</button>
+        </div>
+        <div class="container">
+            <canvas id="hill-canvas" width="380" height="460"></canvas>
+            <div class="pedals">
+                <button id="btn-brake" class="pedal pedal-brake">BRAKE<small style="font-size:10px;font-weight:normal;opacity:0.8;">TILT BACK</small></button>
+                <button id="btn-gas" class="pedal pedal-gas">GAS<small style="font-size:10px;font-weight:normal;opacity:0.8;">TILT FWD</small></button>
+            </div>
+        </div>
+        <script>
+            const canvas = document.getElementById('hill-canvas');
+            const ctx = canvas.getContext('2d');
+
+            let car = { x: 100, y: 200, vx: 0, vy: 0, angle: 0, vAngle: 0, fuel: 100 };
+            let gasPressed = false;
+            let brakePressed = false;
+            let coins = 0;
+            let bestDist = 0;
+            let maxDist = 0;
+            let gameOver = false;
+            let deathReason = 'CRASH';
+            let fuelPickups = [];
+            let coinPickups = [];
+
+            function groundY(wx) {
+                return 320 + Math.sin(wx * 0.005) * 55 + Math.sin(wx * 0.014) * 28 + Math.cos(wx * 0.002) * 65;
+            }
+
+            function groundSlope(wx) {
+                const delta = 2;
+                return (groundY(wx + delta) - groundY(wx - delta)) / (2 * delta);
+            }
+
+            function initGame() {
+                car = { x: 100, y: groundY(100) - 25, vx: 0, vy: 0, angle: 0, vAngle: 0, fuel: 100 };
+                gasPressed = false;
+                brakePressed = false;
+                gameOver = false;
+                maxDist = 0;
+                fuelPickups = [];
+                coinPickups = [];
+
+                for (let wx = 350; wx < 10000; wx += 420) {
+                    fuelPickups.push({ x: wx, y: groundY(wx) - 22, collected: false });
+                }
+                for (let wx = 180; wx < 10000; wx += 160) {
+                    coinPickups.push({ x: wx, y: groundY(wx) - 20, collected: false });
+                }
+                updateHud();
+            }
+
+            function updateHud() {
+                const d = Math.max(0, Math.floor((car.x - 100) / 10));
+                if (d > maxDist) maxDist = d;
+                if (maxDist > bestDist) bestDist = maxDist;
+                document.getElementById('dist').textContent = maxDist + 'm';
+                const fuelEl = document.getElementById('fuel');
+                fuelEl.textContent = Math.max(0, Math.floor(car.fuel)) + '%';
+                fuelEl.style.color = car.fuel < 25 ? '#EF4444' : '#10B981';
+                document.getElementById('coins').textContent = coins;
+            }
+
+            function update() {
+                if (gameOver) return;
+
+                // Physics simulation
+                const gravity = 0.38;
+                car.vy += gravity;
+
+                // Pedals input
+                if (gasPressed) {
+                    car.vx += Math.cos(car.angle) * 0.42;
+                    car.vy += Math.sin(car.angle) * 0.42;
+                    car.fuel = Math.max(0, car.fuel - 0.08);
+                    car.vAngle -= 0.022; // Air tilt
+                }
+                if (brakePressed) {
+                    car.vx -= Math.cos(car.angle) * 0.30;
+                    car.vy -= Math.sin(car.angle) * 0.30;
+                    car.vAngle += 0.025; // Air tilt back
+                }
+
+                // Passive fuel consumption
+                car.fuel = Math.max(0, car.fuel - 0.015);
+
+                // Damping
+                car.vx *= 0.985;
+                car.vy *= 0.99;
+                car.vAngle *= 0.94;
+
+                car.x += car.vx;
+                car.y += car.vy;
+                car.angle += car.vAngle;
+
+                // Wheel contact points
+                const wb = 22;
+                const fx = car.x + Math.cos(car.angle) * wb;
+                const fy = car.y + Math.sin(car.angle) * wb + 12;
+                const rx = car.x - Math.cos(car.angle) * wb;
+                const ry = car.y - Math.sin(car.angle) * wb + 12;
+
+                const fgy = groundY(fx);
+                const rgy = groundY(rx);
+
+                let onGround = false;
+
+                if (fy >= fgy) {
+                    car.y -= (fy - fgy) * 0.6;
+                    car.vy = Math.min(car.vy, 0);
+                    onGround = true;
+                }
+                if (ry >= rgy) {
+                    car.y -= (ry - rgy) * 0.6;
+                    car.vy = Math.min(car.vy, 0);
+                    onGround = true;
+                }
+
+                if (onGround) {
+                    const targetAngle = Math.atan2(fgy - rgy, 2 * wb);
+                    car.angle += (targetAngle - car.angle) * 0.22;
+                }
+
+                // Driver head collision check
+                const hx = car.x - Math.sin(car.angle) * 18;
+                const hy = car.y - Math.cos(car.angle) * 18;
+                const hgy = groundY(hx);
+                if (hy >= hgy - 4) {
+                    gameOver = true;
+                    deathReason = 'HEAD CRASH (FLIPPED)';
+                    if (navigator.vibrate) navigator.vibrate(300);
+                }
+
+                // Out of gas check
+                if (car.fuel <= 0 && Math.abs(car.vx) < 0.15 && Math.abs(car.vy) < 0.15) {
+                    gameOver = true;
+                    deathReason = 'OUT OF GAS';
+                }
+
+                // Coin pickups
+                coinPickups.forEach(c => {
+                    if (!c.collected && Math.hypot(car.x - c.x, car.y - c.y) < 28) {
+                        c.collected = true;
+                        coins += 1;
+                        if (navigator.vibrate) navigator.vibrate(40);
+                    }
+                });
+
+                // Fuel pickups
+                fuelPickups.forEach(f => {
+                    if (!f.collected && Math.hypot(car.x - f.x, car.y - f.y) < 32) {
+                        f.collected = true;
+                        car.fuel = 100;
+                        if (navigator.vibrate) navigator.vibrate([60, 40, 80]);
+                    }
+                });
+
+                updateHud();
+            }
+
+            function draw() {
+                ctx.fillStyle = '#090D16';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Camera follow
+                const camX = car.x - 120;
+                const camY = car.y - 260;
+
+                ctx.save();
+                ctx.translate(-camX, -camY);
+
+                // Draw background mountain silhouette
+                ctx.fillStyle = '#111827';
+                ctx.beginPath();
+                ctx.moveTo(camX, camY + canvas.height);
+                for (let wx = camX - 40; wx <= camX + canvas.width + 40; wx += 30) {
+                    const my = 260 + Math.sin(wx * 0.002) * 80 + Math.cos(wx * 0.007) * 40;
+                    ctx.lineTo(wx, my);
+                }
+                ctx.lineTo(camX + canvas.width + 40, camY + canvas.height);
+                ctx.closePath();
+                ctx.fill();
+
+                // Draw ground
+                ctx.fillStyle = '#10B981';
+                ctx.beginPath();
+                ctx.moveTo(camX - 20, camY + canvas.height + 100);
+                for (let wx = camX - 20; wx <= camX + canvas.width + 30; wx += 10) {
+                    ctx.lineTo(wx, groundY(wx));
+                }
+                ctx.lineTo(camX + canvas.width + 30, camY + canvas.height + 100);
+                ctx.closePath();
+                ctx.fill();
+
+                // Ground soil under layer
+                ctx.fillStyle = '#064E3B';
+                ctx.beginPath();
+                ctx.moveTo(camX - 20, camY + canvas.height + 100);
+                for (let wx = camX - 20; wx <= camX + canvas.width + 30; wx += 10) {
+                    ctx.lineTo(wx, groundY(wx) + 12);
+                }
+                ctx.lineTo(camX + canvas.width + 30, camY + canvas.height + 100);
+                ctx.closePath();
+                ctx.fill();
+
+                // Draw coins
+                coinPickups.forEach(c => {
+                    if (!c.collected && c.x > camX - 20 && c.x < camX + canvas.width + 20) {
+                        ctx.save();
+                        ctx.fillStyle = '#FBBF24';
+                        ctx.shadowColor = '#F59E0B';
+                        ctx.shadowBlur = 8;
+                        ctx.beginPath();
+                        ctx.arc(c.x, c.y, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = '#92400E';
+                        ctx.font = 'bold 9px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('C', c.x, c.y + 3);
+                        ctx.restore();
+                    }
+                });
+
+                // Draw fuel canisters
+                fuelPickups.forEach(f => {
+                    if (!f.collected && f.x > camX - 20 && f.x < camX + canvas.width + 20) {
+                        ctx.save();
+                        ctx.fillStyle = '#EF4444';
+                        ctx.fillRect(f.x - 9, f.y - 12, 18, 22);
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(f.x - 4, f.y - 16, 8, 5);
+                        ctx.font = 'bold 9px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('GAS', f.x, f.y + 2);
+                        ctx.restore();
+                    }
+                });
+
+                // Draw Car
+                ctx.save();
+                ctx.translate(car.x, car.y);
+                ctx.rotate(car.angle);
+
+                // Chassis body
+                ctx.fillStyle = '#38BDF8';
+                ctx.shadowColor = '#38BDF8';
+                ctx.shadowBlur = 10;
+                ctx.fillRect(-24, -10, 48, 16);
+                // Roof / Roll cage
+                ctx.strokeStyle = '#94A3B8';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(-14, -22, 26, 14);
+                // Driver Helmet
+                ctx.fillStyle = '#F59E0B';
+                ctx.beginPath();
+                ctx.arc(-2, -14, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Wheels
+                ctx.fillStyle = '#1E293B';
+                ctx.strokeStyle = '#64748B';
+                ctx.lineWidth = 2;
+                // Front wheel
+                ctx.beginPath();
+                ctx.arc(20, 8, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                // Rear wheel
+                ctx.beginPath();
+                ctx.arc(-20, 8, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.restore();
+                ctx.restore();
+
+                // Game Over banner
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(9, 13, 22, 0.90)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#EF4444';
+                    ctx.font = 'bold 24px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(deathReason, canvas.width / 2, canvas.height / 2 - 25);
+                    ctx.fillStyle = '#38BDF8';
+                    ctx.font = 'bold 22px sans-serif';
+                    ctx.fillText('Distance: ' + maxDist + 'm | ' + coins + ' Coins', canvas.width / 2, canvas.height / 2 + 15);
+                    ctx.fillStyle = '#94A3B8';
+                    ctx.font = '15px sans-serif';
+                    ctx.fillText('Tap anywhere to drive again', canvas.width / 2, canvas.height / 2 + 55);
+                }
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            // Controls setup
+            const btnGas = document.getElementById('btn-gas');
+            const btnBrake = document.getElementById('btn-brake');
+
+            const startGas = (e) => { e.preventDefault(); gasPressed = true; btnGas.classList.add('active'); };
+            const stopGas = (e) => { e.preventDefault(); gasPressed = false; btnGas.classList.remove('active'); };
+            btnGas.addEventListener('touchstart', startGas);
+            btnGas.addEventListener('touchend', stopGas);
+            btnGas.addEventListener('mousedown', startGas);
+            btnGas.addEventListener('mouseup', stopGas);
+
+            const startBrake = (e) => { e.preventDefault(); brakePressed = true; btnBrake.classList.add('active'); };
+            const stopBrake = (e) => { e.preventDefault(); brakePressed = false; btnBrake.classList.remove('active'); };
+            btnBrake.addEventListener('touchstart', startBrake);
+            btnBrake.addEventListener('touchend', stopBrake);
+            btnBrake.addEventListener('mousedown', startBrake);
+            btnBrake.addEventListener('mouseup', stopBrake);
+
+            // Tap screen to restart when game over
+            canvas.addEventListener('click', () => { if (gameOver) initGame(); });
+            canvas.addEventListener('touchstart', () => { if (gameOver) initGame(); });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' || e.key === 'd') gasPressed = true;
+                if (e.key === 'ArrowLeft' || e.key === 'a') brakePressed = true;
+                if (e.key === ' ' && gameOver) initGame();
+            });
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowRight' || e.key === 'd') gasPressed = false;
+                if (e.key === 'ArrowLeft' || e.key === 'a') brakePressed = false;
+            });
+
+            initGame();
+            loop();
+        </script>
+    </body>
+    </html>
+    """.trimIndent()
+
+    // 15. GAME: ALTO'S MOUNTAIN SLIDE
+    private fun getAltosSlideHtml(): String = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Alto's Mountain Slide</title>
+        $COMMON_HEAD
+        <style>
+            .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100% - 50px); padding: 4px; }
+            #alto-canvas {
+                background: linear-gradient(180deg, #1E1B4B 0%, #4338CA 40%, #BE185D 75%, #F97316 100%);
+                border: 2px solid #312E81;
+                border-radius: 12px;
+                box-shadow: 0 0 24px rgba(244, 63, 94, 0.25);
+                max-width: 96vw;
+                height: 84vh;
+                touch-action: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="hud">
+            <div><span style="color:#94A3B8;">DIST: </span><span id="dist" class="badge">0m</span></div>
+            <div><span style="color:#94A3B8;">FLIPS: </span><span id="flips" class="badge" style="color:#F43F5E;">0</span></div>
+            <div><span style="color:#94A3B8;">COINS: </span><span id="coins" class="badge">0</span></div>
+            <button class="btn" onclick="initGame()">Restart</button>
+        </div>
+        <div class="container">
+            <canvas id="alto-canvas" width="380" height="520"></canvas>
+        </div>
+        <script>
+            const canvas = document.getElementById('alto-canvas');
+            const ctx = canvas.getContext('2d');
+
+            let rider = { x: 100, y: 200, vx: 5, vy: 0, angle: 0, vAngle: 0, inAir: false, flipsCount: 0 };
+            let touching = false;
+            let coins = 0;
+            let bestDist = 0;
+            let maxDist = 0;
+            let totalFlips = 0;
+            let comboMult = 1;
+            let gameOver = false;
+            let scarf = [];
+            let obstacles = [];
+            let coinPickups = [];
+
+            function groundY(wx) {
+                return 360 + Math.sin(wx * 0.004) * 65 + Math.sin(wx * 0.012) * 35;
+            }
+
+            function groundSlope(wx) {
+                const delta = 2;
+                return (groundY(wx + delta) - groundY(wx - delta)) / (2 * delta);
+            }
+
+            function initGame() {
+                rider = { x: 100, y: groundY(100) - 15, vx: 4.8, vy: 0, angle: 0, vAngle: 0, inAir: false, flipsCount: 0 };
+                touching = false;
+                comboMult = 1;
+                gameOver = false;
+                maxDist = 0;
+                scarf = [];
+                for (let i = 0; i < 14; i++) {
+                    scarf.push({ x: rider.x - i * 4, y: rider.y });
+                }
+                obstacles = [];
+                coinPickups = [];
+                for (let wx = 500; wx < 15000; wx += 350 + Math.random() * 250) {
+                    obstacles.push({ x: wx, y: groundY(wx), width: 22, height: 20 });
+                }
+                for (let wx = 280; wx < 15000; wx += 190) {
+                    coinPickups.push({ x: wx, y: groundY(wx) - 30, collected: false });
+                }
+                updateHud();
+            }
+
+            function updateHud() {
+                const d = Math.max(0, Math.floor((rider.x - 100) / 10));
+                if (d > maxDist) maxDist = d;
+                if (maxDist > bestDist) bestDist = maxDist;
+                document.getElementById('dist').textContent = maxDist + 'm';
+                document.getElementById('flips').textContent = totalFlips;
+                document.getElementById('coins').textContent = coins;
+            }
+
+            function update() {
+                if (gameOver) return;
+
+                // Physics
+                const gy = groundY(rider.x);
+                const slope = groundSlope(rider.x);
+                const slopeAngle = Math.atan(slope);
+
+                if (rider.y >= gy - 6) {
+                    // On ground
+                    if (rider.inAir) {
+                        // Landing check
+                        const diff = Math.abs(Math.sin(rider.angle - slopeAngle));
+                        if (diff > 0.6) {
+                            // Crash on head
+                            gameOver = true;
+                            if (navigator.vibrate) navigator.vibrate(300);
+                        } else {
+                            // Perfect landing
+                            if (rider.flipsCount > 0) {
+                                totalFlips += rider.flipsCount;
+                                rider.vx += rider.flipsCount * 2.2;
+                                comboMult++;
+                                if (navigator.vibrate) navigator.vibrate([40, 30, 60]);
+                            }
+                        }
+                        rider.flipsCount = 0;
+                    }
+                    rider.inAir = false;
+                    rider.y = gy - 6;
+                    rider.vy = 0;
+                    rider.angle = slopeAngle;
+
+                    // Downhill acceleration
+                    rider.vx += Math.sin(slopeAngle) * 0.28;
+                    rider.vx = Math.max(3.2, Math.min(rider.vx * 0.998, 14));
+                } else {
+                    // Airborne
+                    rider.inAir = true;
+                    rider.vy += 0.36; // Gravity
+                    if (touching) {
+                        // Backflip rotation
+                        rider.angle -= 0.095;
+                        if (Math.abs(rider.angle) > (rider.flipsCount + 1) * Math.PI * 1.8) {
+                            rider.flipsCount++;
+                        }
+                    }
+                }
+
+                rider.x += rider.vx;
+                rider.y += rider.vy;
+
+                // Scarf trailing physics
+                if (scarf.length > 0) {
+                    scarf[0] = { x: rider.x - Math.cos(rider.angle) * 8, y: rider.y - 12 };
+                    for (let i = 1; i < scarf.length; i++) {
+                        const target = scarf[i - 1];
+                        scarf[i].x += (target.x - scarf[i].x) * 0.45;
+                        scarf[i].y += (target.y - scarf[i].y) * 0.45 + 0.3;
+                    }
+                }
+
+                // Obstacle collision
+                obstacles.forEach(obs => {
+                    if (Math.abs(rider.x - obs.x) < 14 && Math.abs(rider.y - obs.y) < 16 && !rider.inAir) {
+                        gameOver = true;
+                        if (navigator.vibrate) navigator.vibrate(300);
+                    }
+                });
+
+                // Coin collection
+                coinPickups.forEach(c => {
+                    if (!c.collected && Math.hypot(rider.x - c.x, rider.y - c.y) < 26) {
+                        c.collected = true;
+                        coins += 1;
+                        if (navigator.vibrate) navigator.vibrate(40);
+                    }
+                });
+
+                updateHud();
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const camX = rider.x - 110;
+                const camY = rider.y - 280;
+
+                ctx.save();
+                ctx.translate(-camX, -camY);
+
+                // Distant mountains
+                ctx.fillStyle = '#312E81';
+                ctx.beginPath();
+                ctx.moveTo(camX, camY + canvas.height);
+                for (let wx = camX - 40; wx <= camX + canvas.width + 40; wx += 25) {
+                    const my = 280 + Math.sin(wx * 0.002) * 90 + Math.cos(wx * 0.006) * 50;
+                    ctx.lineTo(wx, my);
+                }
+                ctx.lineTo(camX + canvas.width + 40, camY + canvas.height);
+                ctx.closePath();
+                ctx.fill();
+
+                // Ground snow
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.moveTo(camX - 20, camY + canvas.height + 100);
+                for (let wx = camX - 20; wx <= camX + canvas.width + 30; wx += 10) {
+                    ctx.lineTo(wx, groundY(wx));
+                }
+                ctx.lineTo(camX + canvas.width + 30, camY + canvas.height + 100);
+                ctx.closePath();
+                ctx.fill();
+
+                // Under snow gradient
+                ctx.fillStyle = '#E2E8F0';
+                ctx.beginPath();
+                ctx.moveTo(camX - 20, camY + canvas.height + 100);
+                for (let wx = camX - 20; wx <= camX + canvas.width + 30; wx += 10) {
+                    ctx.lineTo(wx, groundY(wx) + 8);
+                }
+                ctx.lineTo(camX + canvas.width + 30, camY + canvas.height + 100);
+                ctx.closePath();
+                ctx.fill();
+
+                // Obstacles
+                ctx.fillStyle = '#475569';
+                obstacles.forEach(obs => {
+                    if (obs.x > camX - 20 && obs.x < camX + canvas.width + 20) {
+                        ctx.beginPath();
+                        ctx.moveTo(obs.x - 10, obs.y);
+                        ctx.lineTo(obs.x, obs.y - obs.height);
+                        ctx.lineTo(obs.x + 10, obs.y);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                });
+
+                // Coins
+                coinPickups.forEach(c => {
+                    if (!c.collected && c.x > camX - 20 && c.x < camX + canvas.width + 20) {
+                        ctx.save();
+                        ctx.fillStyle = '#FBBF24';
+                        ctx.shadowColor = '#F59E0B';
+                        ctx.shadowBlur = 8;
+                        ctx.beginPath();
+                        ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                });
+
+                // Scarf
+                if (scarf.length > 1) {
+                    ctx.strokeStyle = '#EF4444';
+                    ctx.lineWidth = 3.5;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(scarf[0].x, scarf[0].y);
+                    for (let i = 1; i < scarf.length; i++) {
+                        ctx.lineTo(scarf[i].x, scarf[i].y);
+                    }
+                    ctx.stroke();
+                }
+
+                // Snowboarder
+                ctx.save();
+                ctx.translate(rider.x, rider.y);
+                ctx.rotate(rider.angle);
+
+                // Snowboard
+                ctx.fillStyle = '#F43F5E';
+                ctx.shadowColor = '#F43F5E';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.roundRect(-16, -2, 32, 4, 2);
+                ctx.fill();
+
+                // Rider body
+                ctx.fillStyle = '#F8FAFC';
+                ctx.fillRect(-4, -14, 8, 12);
+                // Rider hood
+                ctx.fillStyle = '#F43F5E';
+                ctx.beginPath();
+                ctx.arc(0, -17, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+                ctx.restore();
+
+                // Game Over banner
+                if (gameOver) {
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#EF4444';
+                    ctx.font = 'bold 26px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('WIPEOUT!', canvas.width / 2, canvas.height / 2 - 25);
+                    ctx.fillStyle = '#F43F5E';
+                    ctx.font = 'bold 20px sans-serif';
+                    ctx.fillText(maxDist + 'm | ' + totalFlips + ' Backflips', canvas.width / 2, canvas.height / 2 + 15);
+                    ctx.fillStyle = '#94A3B8';
+                    ctx.font = '15px sans-serif';
+                    ctx.fillText('Tap anywhere to slide again', canvas.width / 2, canvas.height / 2 + 55);
+                }
+            }
+
+            function loop() {
+                update();
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            // Touch / Jump / Backflip controls
+            const onTouchStart = (e) => {
+                e.preventDefault();
+                if (gameOver) {
+                    initGame();
+                    return;
+                }
+                touching = true;
+                if (!rider.inAir) {
+                    rider.vy = -8.6;
+                    rider.inAir = true;
+                    if (navigator.vibrate) navigator.vibrate(30);
+                }
+            };
+            const onTouchEnd = (e) => {
+                e.preventDefault();
+                touching = false;
+            };
+
+            canvas.addEventListener('touchstart', onTouchStart);
+            canvas.addEventListener('touchend', onTouchEnd);
+            canvas.addEventListener('mousedown', onTouchStart);
+            canvas.addEventListener('mouseup', onTouchEnd);
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'ArrowUp') {
+                    if (gameOver) initGame();
+                    else {
+                        touching = true;
+                        if (!rider.inAir) rider.vy = -8.6;
+                    }
+                }
+            });
+            window.addEventListener('keyup', (e) => {
+                if (e.key === ' ' || e.key === 'ArrowUp') touching = false;
+            });
+
+            initGame();
+            loop();
+        </script>
+    </body>
+    </html>
+    """.trimIndent()
 }
+
 

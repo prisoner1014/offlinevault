@@ -7,7 +7,7 @@ class OfflineGamesTest {
 
     @Test
     fun testCatalogHasAtLeastTenGames() {
-        assertEquals("There should be exactly 13 offline games", 13, OfflineGameCatalog.games.size)
+        assertEquals("There should be exactly 15 offline games", 15, OfflineGameCatalog.games.size)
     }
 
     @Test
