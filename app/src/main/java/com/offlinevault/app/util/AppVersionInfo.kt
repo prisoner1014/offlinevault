@@ -13,16 +13,49 @@ data class VersionRelease(
 object AppVersionInfo {
     const val APP_NAME = "Offline Vault"
     const val APP_TAGLINE = "All-in-One Private Offline Knowledge & Media Suite"
-    const val CURRENT_VERSION_NAME = "1.3.0"
-    const val CURRENT_VERSION_CODE = 8
-    const val CURRENT_SERIAL_NUMBER = "OV-20261031-ARCADE-ARM64"
-    const val BUILD_CHANNEL = "Production / Fold Edition"
-    const val BUILD_DATE = "October 31, 2026"
+    const val CURRENT_VERSION_NAME = "1.5.0"
+    const val CURRENT_VERSION_CODE = 12
+    const val CURRENT_SERIAL_NUMBER = "OV-20261102-AUTO-ARM64"
+    const val BUILD_CHANNEL = "Production / Fold & Automotive Edition"
+    const val BUILD_DATE = "November 2, 2026"
     const val TARGET_HARDWARE = "Samsung Galaxy Fold & Foldable Architecture"
     const val PRIMARY_ABI = "arm64-v8a (64-bit Native Execution)"
     const val NEURAL_ENGINE = "llama.cpp v0.1.1 (libllama.so + libllama_jni.so)"
 
     val versionHistory = listOf(
+        VersionRelease(
+            versionName = "1.5.0",
+            versionCode = 12,
+            serialNumber = "OV-20261102-AUTO-ARM64",
+            releaseDate = "November 2, 2026",
+            highlights = listOf(
+                "Native Android Auto MediaLibraryService integration for vehicle center consoles and Desktop Head Unit (DHU).",
+                "In-dash Podcasts library with 10-second rewind and 30-second fast-forward steering wheel controls.",
+                "Audio-Only Driving Mode for downloaded videos (zero driver distraction, clean soundtrack playback through car speakers).",
+                "Books Read Aloud: Text-to-Speech chapter narration with timeline scrubbers and steering wheel controls.",
+                "Automatic navigation audio ducking (handleAudioFocus) and noise handling (auto-pause on disconnect)."
+            )
+        ),
+        VersionRelease(
+            versionName = "1.4.1",
+            versionCode = 11,
+            serialNumber = "OV-20261101-ARCADE-FIX",
+            releaseDate = "November 1, 2026",
+            highlights = listOf(
+                "Pixel Crossing collision overhaul, smooth river log floating physics, and screen-wide swipe gestures.",
+                "Jetpack Rush and Cyber Blade Slicer touch control improvements and instant screen-tap restart."
+            )
+        ),
+        VersionRelease(
+            versionName = "1.4.0",
+            versionCode = 10,
+            serialNumber = "OV-20261101-SHRINK-ARM64",
+            releaseDate = "November 1, 2026",
+            highlights = listOf(
+                "Minified R8/ProGuard release build shrinking APK footprint by 80% (from 330MB to 66MB).",
+                "Top 10 Offline Android Games: Cyber Blade Slicer, Pixel Crossing, and Jetpack Rush."
+            )
+        ),
         VersionRelease(
             versionName = "1.3.0",
             versionCode = 8,
