@@ -3253,7 +3253,7 @@ object GameHtmlProvider {
                 border-radius: 12px;
                 box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
                 max-width: 96vw;
-                height: 72vh;
+                height: 70vh;
                 touch-action: none;
             }
             .pedals {
@@ -3264,13 +3264,14 @@ object GameHtmlProvider {
                 padding: 6px 12px;
                 margin-top: 6px;
                 touch-action: none;
+                user-select: none;
             }
             .pedal {
                 flex: 1;
                 margin: 0 8px;
-                height: 54px;
+                height: 58px;
                 border-radius: 14px;
-                font-size: 15px;
+                font-size: 16px;
                 font-weight: 800;
                 display: flex;
                 flex-direction: column;
@@ -3278,11 +3279,13 @@ object GameHtmlProvider {
                 justify-content: center;
                 border: 2px solid;
                 cursor: pointer;
+                user-select: none;
+                touch-action: none;
             }
             .pedal-brake { background: rgba(239, 68, 68, 0.2); border-color: #EF4444; color: #EF4444; }
-            .pedal-brake:active, .pedal-brake.active { background: #EF4444 !important; color: #FFFFFF !important; transform: scale(0.94); }
+            .pedal-brake:active, .pedal-brake.active { background: #EF4444 !important; color: #FFFFFF !important; transform: scale(0.95); }
             .pedal-gas { background: rgba(16, 185, 129, 0.2); border-color: #10B981; color: #10B981; }
-            .pedal-gas:active, .pedal-gas.active { background: #10B981 !important; color: #FFFFFF !important; transform: scale(0.94); }
+            .pedal-gas:active, .pedal-gas.active { background: #10B981 !important; color: #FFFFFF !important; transform: scale(0.95); }
         </style>
     </head>
     <body>
@@ -3295,15 +3298,23 @@ object GameHtmlProvider {
         <div class="container">
             <canvas id="hill-canvas" width="380" height="460"></canvas>
             <div class="pedals">
-                <button id="btn-brake" class="pedal pedal-brake">BRAKE<small style="font-size:10px;font-weight:normal;opacity:0.8;">TILT BACK</small></button>
-                <button id="btn-gas" class="pedal pedal-gas">GAS<small style="font-size:10px;font-weight:normal;opacity:0.8;">TILT FWD</small></button>
+                <button id="btn-brake" class="pedal pedal-brake">BRAKE<small style="font-size:10px;font-weight:normal;opacity:0.8;">AIR TILT FWD</small></button>
+                <button id="btn-gas" class="pedal pedal-gas">GAS<small style="font-size:10px;font-weight:normal;opacity:0.8;">AIR TILT BACK</small></button>
             </div>
         </div>
         <script>
             const canvas = document.getElementById('hill-canvas');
             const ctx = canvas.getContext('2d');
 
-            let car = { x: 100, y: 200, vx: 0, vy: 0, angle: 0, vAngle: 0, fuel: 100 };
+            // Realistic 2-wheel vehicle physics
+            let car = {
+                x: 100, y: 200,
+                vx: 0, vy: 0,
+                angle: 0, vAngle: 0,
+                fuel: 100,
+                frontGrounded: false,
+                rearGrounded: false
+            };
             let gasPressed = false;
             let brakePressed = false;
             let coins = 0;
@@ -3318,13 +3329,16 @@ object GameHtmlProvider {
                 return 320 + Math.sin(wx * 0.005) * 55 + Math.sin(wx * 0.014) * 28 + Math.cos(wx * 0.002) * 65;
             }
 
-            function groundSlope(wx) {
-                const delta = 2;
-                return (groundY(wx + delta) - groundY(wx - delta)) / (2 * delta);
-            }
-
             function initGame() {
-                car = { x: 100, y: groundY(100) - 25, vx: 0, vy: 0, angle: 0, vAngle: 0, fuel: 100 };
+                const gy = groundY(100);
+                car = {
+                    x: 100, y: gy - 25,
+                    vx: 0, vy: 0,
+                    angle: 0, vAngle: 0,
+                    fuel: 100,
+                    frontGrounded: true,
+                    rearGrounded: true
+                };
                 gasPressed = false;
                 brakePressed = false;
                 gameOver = false;
@@ -3332,11 +3346,11 @@ object GameHtmlProvider {
                 fuelPickups = [];
                 coinPickups = [];
 
-                for (let wx = 350; wx < 10000; wx += 420) {
-                    fuelPickups.push({ x: wx, y: groundY(wx) - 22, collected: false });
+                for (let wx = 420; wx < 15000; wx += 480) {
+                    fuelPickups.push({ x: wx, y: groundY(wx) - 24, collected: false });
                 }
-                for (let wx = 180; wx < 10000; wx += 160) {
-                    coinPickups.push({ x: wx, y: groundY(wx) - 20, collected: false });
+                for (let wx = 180; wx < 15000; wx += 160) {
+                    coinPickups.push({ x: wx, y: groundY(wx) - 22, collected: false });
                 }
                 updateHud();
             }
@@ -3355,91 +3369,140 @@ object GameHtmlProvider {
             function update() {
                 if (gameOver) return;
 
-                // Physics simulation
-                const gravity = 0.38;
+                // Gravity
+                const gravity = 0.36;
                 car.vy += gravity;
 
-                // Pedals input
-                if (gasPressed) {
-                    car.vx += Math.cos(car.angle) * 0.42;
-                    car.vy += Math.sin(car.angle) * 0.42;
-                    car.fuel = Math.max(0, car.fuel - 0.08);
-                    car.vAngle -= 0.022; // Air tilt
-                }
-                if (brakePressed) {
-                    car.vx -= Math.cos(car.angle) * 0.30;
-                    car.vy -= Math.sin(car.angle) * 0.30;
-                    car.vAngle += 0.025; // Air tilt back
-                }
-
-                // Passive fuel consumption
-                car.fuel = Math.max(0, car.fuel - 0.015);
-
                 // Damping
-                car.vx *= 0.985;
-                car.vy *= 0.99;
-                car.vAngle *= 0.94;
+                car.vx *= 0.992;
+                car.vy *= 0.992;
 
+                // Position update
                 car.x += car.vx;
                 car.y += car.vy;
-                car.angle += car.vAngle;
 
-                // Wheel contact points
-                const wb = 22;
-                const fx = car.x + Math.cos(car.angle) * wb;
-                const fy = car.y + Math.sin(car.angle) * wb + 12;
-                const rx = car.x - Math.cos(car.angle) * wb;
-                const ry = car.y - Math.sin(car.angle) * wb + 12;
+                // Wheel contact coordinates
+                const wb = 24; // wheelbase half length
+                const wheelR = 9;
+                const cosA = Math.cos(car.angle);
+                const sinA = Math.sin(car.angle);
+
+                const fx = car.x + cosA * wb;
+                const fy = car.y + sinA * wb + 10;
+                const rx = car.x - cosA * wb;
+                const ry = car.y - sinA * wb + 10;
 
                 const fgy = groundY(fx);
                 const rgy = groundY(rx);
 
-                let onGround = false;
-
-                if (fy >= fgy) {
-                    car.y -= (fy - fgy) * 0.6;
-                    car.vy = Math.min(car.vy, 0);
-                    onGround = true;
-                }
-                if (ry >= rgy) {
-                    car.y -= (ry - rgy) * 0.6;
-                    car.vy = Math.min(car.vy, 0);
-                    onGround = true;
-                }
+                car.frontGrounded = (fy + wheelR >= fgy);
+                car.rearGrounded = (ry + wheelR >= rgy);
+                const onGround = car.frontGrounded || car.rearGrounded;
 
                 if (onGround) {
                     const targetAngle = Math.atan2(fgy - rgy, 2 * wb);
-                    car.angle += (targetAngle - car.angle) * 0.22;
+
+                    if (car.frontGrounded && car.rearGrounded) {
+                        // Firm stable ground alignment - NEVER spins out on ground!
+                        car.angle += (targetAngle - car.angle) * 0.28;
+                        car.vAngle *= 0.5;
+                        const avgContact = ((fy + wheelR - fgy) + (ry + wheelR - rgy)) * 0.5;
+                        if (avgContact > 0) {
+                            car.y -= avgContact * 0.72;
+                            if (car.vy > 0) car.vy = 0;
+                        }
+                    } else if (car.rearGrounded) {
+                        // Wheelie or climbing steep hill
+                        const pen = ry + wheelR - rgy;
+                        if (pen > 0) {
+                            car.y -= pen * 0.72;
+                            if (car.vy > 0) car.vy = 0;
+                        }
+                        // Gentle spring restoring front wheel
+                        car.vAngle += (targetAngle - car.angle) * 0.08;
+                        car.vAngle *= 0.88;
+                        car.angle += car.vAngle;
+                    } else if (car.frontGrounded) {
+                        // Nose touched ground
+                        const pen = fy + wheelR - fgy;
+                        if (pen > 0) {
+                            car.y -= pen * 0.72;
+                            if (car.vy > 0) car.vy = 0;
+                        }
+                        car.vAngle += (targetAngle - car.angle) * 0.08;
+                        car.vAngle *= 0.88;
+                        car.angle += car.vAngle;
+                    }
+
+                    // Driving force along ground slope
+                    if (gasPressed && car.fuel > 0) {
+                        const gAngle = Math.atan2(fgy - rgy, 2 * wb);
+                        const drivePower = 0.38;
+                        car.vx += Math.cos(gAngle) * drivePower;
+                        car.vy += Math.sin(gAngle) * drivePower;
+                        car.fuel = Math.max(0, car.fuel - 0.07);
+                    }
+                    if (brakePressed) {
+                        // Controllable smooth braking
+                        car.vx *= 0.92;
+                        // Reverse gently if holding brake while stopped
+                        if (car.vx < 0.4 && car.fuel > 0) {
+                            const gAngle = Math.atan2(fgy - rgy, 2 * wb);
+                            car.vx -= Math.cos(gAngle) * 0.16;
+                            car.vy -= Math.sin(gAngle) * 0.16;
+                            car.fuel = Math.max(0, car.fuel - 0.04);
+                        }
+                    }
+                } else {
+                    // AIRBORNE PHYSICS: Smooth, authentic air tilt
+                    car.vAngle *= 0.94; // Air rotational damping
+                    if (gasPressed && car.fuel > 0) {
+                        // Air tilt back (counter-clockwise / nose up)
+                        car.vAngle -= 0.005;
+                        car.fuel = Math.max(0, car.fuel - 0.05);
+                    }
+                    if (brakePressed) {
+                        // Air tilt forward (clockwise / nose down)
+                        car.vAngle += 0.005;
+                    }
+                    // Safe clamp on rotation speed
+                    car.vAngle = Math.max(-0.065, Math.min(0.065, car.vAngle));
+                    car.angle += car.vAngle;
                 }
 
-                // Driver head collision check
-                const hx = car.x - Math.sin(car.angle) * 18;
-                const hy = car.y - Math.cos(car.angle) * 18;
-                const hgy = groundY(hx);
-                if (hy >= hgy - 4) {
-                    gameOver = true;
-                    deathReason = 'HEAD CRASH (FLIPPED)';
-                    if (navigator.vibrate) navigator.vibrate(300);
+                // Passive fuel burn
+                car.fuel = Math.max(0, car.fuel - 0.012);
+
+                // Driver head crash detection: ONLY when inverted/upside-down!
+                const isUpsideDown = Math.cos(car.angle) < -0.15;
+                if (isUpsideDown) {
+                    const hx = car.x - Math.sin(car.angle) * 16;
+                    const hy = car.y - Math.cos(car.angle) * 16;
+                    if (hy >= groundY(hx) - 3) {
+                        gameOver = true;
+                        deathReason = 'DRIVER HEAD CRASH';
+                        if (navigator.vibrate) navigator.vibrate(300);
+                    }
                 }
 
                 // Out of gas check
-                if (car.fuel <= 0 && Math.abs(car.vx) < 0.15 && Math.abs(car.vy) < 0.15) {
+                if (car.fuel <= 0 && Math.abs(car.vx) < 0.12 && Math.abs(car.vy) < 0.12) {
                     gameOver = true;
                     deathReason = 'OUT OF GAS';
                 }
 
                 // Coin pickups
                 coinPickups.forEach(c => {
-                    if (!c.collected && Math.hypot(car.x - c.x, car.y - c.y) < 28) {
+                    if (!c.collected && Math.hypot(car.x - c.x, car.y - c.y) < 30) {
                         c.collected = true;
                         coins += 1;
-                        if (navigator.vibrate) navigator.vibrate(40);
+                        if (navigator.vibrate) navigator.vibrate(35);
                     }
                 });
 
                 // Fuel pickups
                 fuelPickups.forEach(f => {
-                    if (!f.collected && Math.hypot(car.x - f.x, car.y - f.y) < 32) {
+                    if (!f.collected && Math.hypot(car.x - f.x, car.y - f.y) < 34) {
                         f.collected = true;
                         car.fuel = 100;
                         if (navigator.vibrate) navigator.vibrate([60, 40, 80]);
@@ -3460,7 +3523,7 @@ object GameHtmlProvider {
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // Draw background mountain silhouette
+                // Mountain silhouette
                 ctx.fillStyle = '#111827';
                 ctx.beginPath();
                 ctx.moveTo(camX, camY + canvas.height);
@@ -3472,7 +3535,7 @@ object GameHtmlProvider {
                 ctx.closePath();
                 ctx.fill();
 
-                // Draw ground
+                // Ground surface
                 ctx.fillStyle = '#10B981';
                 ctx.beginPath();
                 ctx.moveTo(camX - 20, camY + canvas.height + 100);
@@ -3483,7 +3546,7 @@ object GameHtmlProvider {
                 ctx.closePath();
                 ctx.fill();
 
-                // Ground soil under layer
+                // Soil under-layer
                 ctx.fillStyle = '#064E3B';
                 ctx.beginPath();
                 ctx.moveTo(camX - 20, camY + canvas.height + 100);
@@ -3494,7 +3557,7 @@ object GameHtmlProvider {
                 ctx.closePath();
                 ctx.fill();
 
-                // Draw coins
+                // Coins
                 coinPickups.forEach(c => {
                     if (!c.collected && c.x > camX - 20 && c.x < camX + canvas.width + 20) {
                         ctx.save();
@@ -3512,7 +3575,7 @@ object GameHtmlProvider {
                     }
                 });
 
-                // Draw fuel canisters
+                // Fuel canisters
                 fuelPickups.forEach(f => {
                     if (!f.collected && f.x > camX - 20 && f.x < camX + canvas.width + 20) {
                         ctx.save();
@@ -3527,38 +3590,48 @@ object GameHtmlProvider {
                     }
                 });
 
-                // Draw Car
+                // Draw Car & Suspension
                 ctx.save();
                 ctx.translate(car.x, car.y);
                 ctx.rotate(car.angle);
+
+                // Suspension springs
+                ctx.strokeStyle = '#64748B';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(20, 0); ctx.lineTo(20, 8);
+                ctx.moveTo(-20, 0); ctx.lineTo(-20, 8);
+                ctx.stroke();
 
                 // Chassis body
                 ctx.fillStyle = '#38BDF8';
                 ctx.shadowColor = '#38BDF8';
                 ctx.shadowBlur = 10;
                 ctx.fillRect(-24, -10, 48, 16);
-                // Roof / Roll cage
+
+                // Roll cage
                 ctx.strokeStyle = '#94A3B8';
                 ctx.lineWidth = 3;
                 ctx.strokeRect(-14, -22, 26, 14);
+
                 // Driver Helmet
                 ctx.fillStyle = '#F59E0B';
                 ctx.beginPath();
                 ctx.arc(-2, -14, 6, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Wheels
+                // Wheels with rims
                 ctx.fillStyle = '#1E293B';
                 ctx.strokeStyle = '#64748B';
                 ctx.lineWidth = 2;
                 // Front wheel
                 ctx.beginPath();
-                ctx.arc(20, 8, 8, 0, Math.PI * 2);
+                ctx.arc(20, 8, 9, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
                 // Rear wheel
                 ctx.beginPath();
-                ctx.arc(-20, 8, 8, 0, Math.PI * 2);
+                ctx.arc(-20, 8, 9, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
 
@@ -3594,21 +3667,21 @@ object GameHtmlProvider {
 
             const startGas = (e) => { e.preventDefault(); gasPressed = true; btnGas.classList.add('active'); };
             const stopGas = (e) => { e.preventDefault(); gasPressed = false; btnGas.classList.remove('active'); };
-            btnGas.addEventListener('touchstart', startGas);
-            btnGas.addEventListener('touchend', stopGas);
+            btnGas.addEventListener('touchstart', startGas, { passive: false });
+            btnGas.addEventListener('touchend', stopGas, { passive: false });
             btnGas.addEventListener('mousedown', startGas);
             btnGas.addEventListener('mouseup', stopGas);
 
             const startBrake = (e) => { e.preventDefault(); brakePressed = true; btnBrake.classList.add('active'); };
             const stopBrake = (e) => { e.preventDefault(); brakePressed = false; btnBrake.classList.remove('active'); };
-            btnBrake.addEventListener('touchstart', startBrake);
-            btnBrake.addEventListener('touchend', stopBrake);
+            btnBrake.addEventListener('touchstart', startBrake, { passive: false });
+            btnBrake.addEventListener('touchend', stopBrake, { passive: false });
             btnBrake.addEventListener('mousedown', startBrake);
             btnBrake.addEventListener('mouseup', stopBrake);
 
             // Tap screen to restart when game over
             canvas.addEventListener('click', () => { if (gameOver) initGame(); });
-            canvas.addEventListener('touchstart', () => { if (gameOver) initGame(); });
+            canvas.addEventListener('touchstart', (e) => { if (gameOver) { e.preventDefault(); initGame(); } }, { passive: false });
 
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'ArrowRight' || e.key === 'd') gasPressed = true;
@@ -3655,7 +3728,8 @@ object GameHtmlProvider {
             <button class="btn" onclick="initGame()">Restart</button>
         </div>
         <div class="container">
-            <canvas id="alto-canvas" width="380" height="520"></canvas>
+            <canvas id="alto-canvas" width="380" height="500"></canvas>
+            <div style="font-size:12px; color:#E0E7FF; font-weight:700; margin-top:6px; letter-spacing:0.5px; opacity:0.9;">TAP ANYWHERE TO JUMP &bull; HOLD TO BACKFLIP</div>
         </div>
         <script>
             const canvas = document.getElementById('alto-canvas');
@@ -3683,22 +3757,24 @@ object GameHtmlProvider {
             }
 
             function initGame() {
-                rider = { x: 100, y: groundY(100) - 15, vx: 4.8, vy: 0, angle: 0, vAngle: 0, inAir: false, flipsCount: 0 };
+                rider = { x: 100, y: groundY(100) - 15, vx: 5.0, vy: 0, angle: 0, vAngle: 0, inAir: false, flipsCount: 0 };
                 touching = false;
                 comboMult = 1;
                 gameOver = false;
                 maxDist = 0;
+                totalFlips = 0;
                 scarf = [];
-                for (let i = 0; i < 14; i++) {
+                for (let i = 0; i < 16; i++) {
                     scarf.push({ x: rider.x - i * 4, y: rider.y });
                 }
                 obstacles = [];
                 coinPickups = [];
-                for (let wx = 500; wx < 15000; wx += 350 + Math.random() * 250) {
-                    obstacles.push({ x: wx, y: groundY(wx), width: 22, height: 20 });
+                // Fair spacing: starts at 800px, then 480-740px apart
+                for (let wx = 800; wx < 18000; wx += 480 + Math.random() * 260) {
+                    obstacles.push({ x: wx, y: groundY(wx), width: 18, height: 22, smashed: false });
                 }
-                for (let wx = 280; wx < 15000; wx += 190) {
-                    coinPickups.push({ x: wx, y: groundY(wx) - 30, collected: false });
+                for (let wx = 260; wx < 18000; wx += 170) {
+                    coinPickups.push({ x: wx, y: groundY(wx) - 28, collected: false });
                 }
                 updateHud();
             }
@@ -3720,20 +3796,21 @@ object GameHtmlProvider {
                 const slope = groundSlope(rider.x);
                 const slopeAngle = Math.atan(slope);
 
-                if (rider.y >= gy - 6) {
-                    // On ground
+                // Ground contact check ONLY when descending or sliding (rider.vy >= 0)
+                if (rider.y >= gy - 6 && rider.vy >= 0) {
                     if (rider.inAir) {
-                        // Landing check
+                        // Landing angle check relative to slope
                         const diff = Math.abs(Math.sin(rider.angle - slopeAngle));
-                        if (diff > 0.6) {
-                            // Crash on head
+                        if (diff > 0.65) {
+                            // Landed on head/board inverted
                             gameOver = true;
                             if (navigator.vibrate) navigator.vibrate(300);
+                            return;
                         } else {
-                            // Perfect landing
+                            // Clean landing!
                             if (rider.flipsCount > 0) {
                                 totalFlips += rider.flipsCount;
-                                rider.vx += rider.flipsCount * 2.2;
+                                rider.vx = Math.min(15.0, rider.vx + rider.flipsCount * 2.8);
                                 comboMult++;
                                 if (navigator.vibrate) navigator.vibrate([40, 30, 60]);
                             }
@@ -3745,18 +3822,19 @@ object GameHtmlProvider {
                     rider.vy = 0;
                     rider.angle = slopeAngle;
 
-                    // Downhill acceleration
-                    rider.vx += Math.sin(slopeAngle) * 0.28;
-                    rider.vx = Math.max(3.2, Math.min(rider.vx * 0.998, 14));
+                    // Downhill glide acceleration
+                    rider.vx += Math.sin(slopeAngle) * 0.32;
+                    rider.vx = Math.max(3.8, Math.min(rider.vx * 0.998, 14.5));
                 } else {
                     // Airborne
                     rider.inAir = true;
-                    rider.vy += 0.36; // Gravity
+                    rider.vy += 0.35; // Gentle floaty gravity
                     if (touching) {
-                        // Backflip rotation
-                        rider.angle -= 0.095;
-                        if (Math.abs(rider.angle) > (rider.flipsCount + 1) * Math.PI * 1.8) {
+                        // Backflip rotation while holding touch in the air
+                        rider.angle -= 0.088;
+                        if (Math.abs(rider.angle) > (rider.flipsCount + 1) * Math.PI * 1.85) {
                             rider.flipsCount++;
+                            if (navigator.vibrate) navigator.vibrate(25);
                         }
                     }
                 }
@@ -3774,11 +3852,23 @@ object GameHtmlProvider {
                     }
                 }
 
-                // Obstacle collision
+                // Obstacle collision & jumping clearance
                 obstacles.forEach(obs => {
-                    if (Math.abs(rider.x - obs.x) < 14 && Math.abs(rider.y - obs.y) < 16 && !rider.inAir) {
-                        gameOver = true;
-                        if (navigator.vibrate) navigator.vibrate(300);
+                    if (obs.smashed) return;
+                    const dx = Math.abs(rider.x - obs.x);
+                    if (dx < 14) {
+                        const obsTop = obs.y - obs.height;
+                        // If rider's feet are lower than obstacle top, collide!
+                        if (rider.y > obsTop + 3) {
+                            // If sliding at high boost speed, smash through obstacle!
+                            if (rider.vx > 9.5) {
+                                obs.smashed = true;
+                                if (navigator.vibrate) navigator.vibrate([30, 40, 50]);
+                            } else {
+                                gameOver = true;
+                                if (navigator.vibrate) navigator.vibrate(300);
+                            }
+                        }
                     }
                 });
 
@@ -3837,16 +3927,27 @@ object GameHtmlProvider {
                 ctx.closePath();
                 ctx.fill();
 
-                // Obstacles
-                ctx.fillStyle = '#475569';
+                // Obstacles (Trees & Rocks with snow trim)
                 obstacles.forEach(obs => {
+                    if (obs.smashed) return;
                     if (obs.x > camX - 20 && obs.x < camX + canvas.width + 20) {
+                        ctx.save();
+                        ctx.fillStyle = '#1E293B';
                         ctx.beginPath();
                         ctx.moveTo(obs.x - 10, obs.y);
                         ctx.lineTo(obs.x, obs.y - obs.height);
                         ctx.lineTo(obs.x + 10, obs.y);
                         ctx.closePath();
                         ctx.fill();
+                        // Snow frosting on top of tree
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.beginPath();
+                        ctx.moveTo(obs.x - 4, obs.y - obs.height + 6);
+                        ctx.lineTo(obs.x, obs.y - obs.height);
+                        ctx.lineTo(obs.x + 4, obs.y - obs.height + 6);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.restore();
                     }
                 });
 
@@ -3925,41 +4026,53 @@ object GameHtmlProvider {
                 requestAnimationFrame(loop);
             }
 
-            // Touch / Jump / Backflip controls
-            const onTouchStart = (e) => {
-                e.preventDefault();
+            // High-responsiveness jump & backflip controls
+            function doJump() {
                 if (gameOver) {
                     initGame();
                     return;
                 }
                 touching = true;
                 if (!rider.inAir) {
-                    rider.vy = -8.6;
+                    rider.vy = -10.5; // High, floaty jump
+                    rider.y -= 8;     // Immediately separate from ground
                     rider.inAir = true;
-                    if (navigator.vibrate) navigator.vibrate(30);
+                    if (navigator.vibrate) navigator.vibrate(35);
                 }
-            };
-            const onTouchEnd = (e) => {
-                e.preventDefault();
-                touching = false;
-            };
+            }
 
-            canvas.addEventListener('touchstart', onTouchStart);
-            canvas.addEventListener('touchend', onTouchEnd);
-            canvas.addEventListener('mousedown', onTouchStart);
-            canvas.addEventListener('mouseup', onTouchEnd);
+            function endTouch() {
+                touching = false;
+            }
+
+            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); doJump(); }, { passive: false });
+            canvas.addEventListener('touchend', (e) => { e.preventDefault(); endTouch(); }, { passive: false });
+            canvas.addEventListener('mousedown', (e) => { e.preventDefault(); doJump(); });
+            canvas.addEventListener('mouseup', (e) => { e.preventDefault(); endTouch(); });
+
+            // Allow tapping anywhere on container or window to jump
+            window.addEventListener('touchstart', (e) => {
+                if (e.target.tagName !== 'BUTTON') {
+                    e.preventDefault();
+                    doJump();
+                }
+            }, { passive: false });
+            window.addEventListener('touchend', (e) => {
+                if (e.target.tagName !== 'BUTTON') {
+                    endTouch();
+                }
+            }, { passive: false });
 
             window.addEventListener('keydown', (e) => {
                 if (e.key === ' ' || e.key === 'ArrowUp') {
-                    if (gameOver) initGame();
-                    else {
-                        touching = true;
-                        if (!rider.inAir) rider.vy = -8.6;
-                    }
+                    e.preventDefault();
+                    doJump();
                 }
             });
             window.addEventListener('keyup', (e) => {
-                if (e.key === ' ' || e.key === 'ArrowUp') touching = false;
+                if (e.key === ' ' || e.key === 'ArrowUp') {
+                    endTouch();
+                }
             });
 
             initGame();

@@ -13,9 +13,9 @@ data class VersionRelease(
 object AppVersionInfo {
     const val APP_NAME = "Offline Vault"
     const val APP_TAGLINE = "All-in-One Private Offline Knowledge & Media Suite"
-    const val CURRENT_VERSION_NAME = "1.6.0"
-    const val CURRENT_VERSION_CODE = 13
-    const val CURRENT_SERIAL_NUMBER = "OV-20261102-SHUFFLE-GAMES-ARM64"
+    const val CURRENT_VERSION_NAME = "1.6.1"
+    const val CURRENT_VERSION_CODE = 14
+    const val CURRENT_SERIAL_NUMBER = "OV-20261102-PHYSICS-TUNING-ARM64"
     const val BUILD_CHANNEL = "Production / Fold, Auto & AI Edition"
     const val BUILD_DATE = "November 2, 2026"
     const val TARGET_HARDWARE = "Samsung Galaxy Fold & Foldable Architecture"
@@ -23,6 +23,16 @@ object AppVersionInfo {
     const val NEURAL_ENGINE = "llama.cpp v0.1.1 (libllama.so + libllama_jni.so)"
 
     val versionHistory = listOf(
+        VersionRelease(
+            versionName = "1.6.1",
+            versionCode = 14,
+            serialNumber = "OV-20261102-PHYSICS-TUNING-ARM64",
+            releaseDate = "November 2, 2026",
+            highlights = listOf(
+                "Alto's Mountain Slide Jump & Obstacle Fix: Instant jump impulse, floaty air physics, obstacle jumping clearance, and supersonic boost smash-through.",
+                "Hill Climb Racer 2D Physics Overhaul: 2-wheel suspension chassis, stable ground alignment without wild rotation, controlled air tilt, and realistic upside-down crash check."
+            )
+        ),
         VersionRelease(
             versionName = "1.6.0",
             versionCode = 13,
