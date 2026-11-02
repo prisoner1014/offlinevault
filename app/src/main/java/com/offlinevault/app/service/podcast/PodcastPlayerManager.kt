@@ -57,10 +57,20 @@ object PodcastPlayerManager {
         }
     }
 
+    fun getPlayer(context: Context): ExoPlayer = getOrCreatePlayer(context)
+
     private fun getOrCreatePlayer(context: Context): ExoPlayer {
         appContext = context.applicationContext
         if (exoPlayer == null) {
-            exoPlayer = ExoPlayer.Builder(context.applicationContext).build().apply {
+            val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_SPEECH)
+                .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                .build()
+
+            exoPlayer = ExoPlayer.Builder(context.applicationContext)
+                .setAudioAttributes(audioAttributes, true)
+                .setHandleAudioBecomingNoisy(true)
+                .build().apply {
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(state: Int) {
                         PodcastPlayerManager.isBuffering = state == Player.STATE_BUFFERING
@@ -148,6 +158,32 @@ object PodcastPlayerManager {
         if (episode.lastPlaybackPositionMs > 1000L) {
             player.seekTo(episode.lastPlaybackPositionMs)
         }
+        player.playWhenReady = true
+        player.play()
+    }
+
+    fun playMediaItem(
+        context: Context,
+        mediaItem: MediaItem,
+        title: String,
+        subtitle: String? = null,
+        imageUrl: String? = null
+    ) {
+        val player = getOrCreatePlayer(context)
+        persistCurrentPosition()
+
+        currentEpisode = null
+        currentFeedTitle = subtitle
+        currentImageUrl = imageUrl
+        errorMessage = null
+        currentPositionMs = 0L
+        durationMs = 0L
+
+        player.stop()
+        player.clearMediaItems()
+        player.setMediaItem(mediaItem)
+        player.setPlaybackSpeed(playbackSpeed)
+        player.prepare()
         player.playWhenReady = true
         player.play()
     }

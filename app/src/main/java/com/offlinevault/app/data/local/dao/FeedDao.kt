@@ -16,6 +16,12 @@ interface FeedDao {
     @Query("SELECT * FROM episodes WHERE isDownloaded = 1 ORDER BY pubDate DESC")
     fun getDownloadedEpisodes(): Flow<List<EpisodeEntity>>
 
+    @Query("SELECT * FROM episodes WHERE isDownloaded = 1 ORDER BY pubDate DESC")
+    suspend fun getDownloadedEpisodesList(): List<EpisodeEntity>
+
+    @Query("SELECT * FROM feeds ORDER BY title ASC")
+    suspend fun getAllFeedsList(): List<FeedEntity>
+
     @Query("SELECT * FROM episodes WHERE id = :episodeId")
     suspend fun getEpisodeById(episodeId: Long): EpisodeEntity?
 
